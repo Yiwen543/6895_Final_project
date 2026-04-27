@@ -22,14 +22,33 @@ ssh "$PI_HOST" "mkdir -p ~/nova/voices && \
       -O ~/nova/voices/en_US-lessac-medium.onnx \
       'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx'"
 
-echo "==> Setting SunFounder USB microphone as default PipeWire input"
+echo "==> Installing ReSpeaker 2-Mics HAT driver (HinTak fork for Pi 5 kernel 6.6)"
 ssh "$PI_HOST" "
-    USB_SRC=\$(pactl list sources short 2>/dev/null | grep -i usb | awk '{print \$2}' | head -1)
-    if [ -n \"\$USB_SRC\" ]; then
-        pactl set-default-source \"\$USB_SRC\"
-        echo \"Default input set to: \$USB_SRC\"
+    if dpkg -l | grep -q seeed-voicecard 2>/dev/null; then
+        echo 'ReSpeaker driver already installed, skipping.'
     else
-        echo 'WARNING: USB microphone not detected. Plug it in and re-run deploy.sh.'
+        sudo apt-get install -y --no-install-recommends git raspberrypi-kernel-headers dkms
+        if [ ! -d ~/seeed-voicecard ]; then
+            git clone https://github.com/HinTak/seeed-voicecard ~/seeed-voicecard
+        fi
+        cd ~/seeed-voicecard && git checkout v6.6
+        sudo ./install.sh
+        echo 'ReSpeaker driver installed. Reboot required before audio works.'
+    fi
+"
+
+echo "==> Enabling I2C (required by ReSpeaker WM8960 codec)"
+ssh "$PI_HOST" "sudo raspi-config nonint do_i2c 0"
+
+echo "==> Configuring ReSpeaker as default audio input"
+ssh "$PI_HOST" "
+    SEEED_SRC=\$(pactl list sources short 2>/dev/null | grep -i seeed | awk '{print \$2}' | head -1)
+    if [ -n \"\$SEEED_SRC\" ]; then
+        pactl set-default-source \"\$SEEED_SRC\"
+        echo \"Default input set to: \$SEEED_SRC\"
+    else
+        echo 'NOTE: ReSpeaker not yet visible to PipeWire — a reboot is needed first.'
+        echo 'After reboot, re-run deploy.sh to complete audio configuration.'
     fi
 "
 
@@ -56,6 +75,16 @@ echo "    pair   ${BT_MAC}"
 echo "    trust  ${BT_MAC}"
 echo "    connect ${BT_MAC}"
 echo "    exit"
+echo ""
+read -rp "Reboot Pi now to activate ReSpeaker driver? [y/N] " reboot_answer
+if [[ "${reboot_answer,,}" == "y" ]]; then
+    ssh "$PI_HOST" "sudo reboot" || true
+    echo ""
+    echo "Pi is rebooting. Wait ~60 seconds, then re-run deploy.sh to finalize audio config:"
+    echo "  ./deploy.sh ${PI_HOST} ${BT_MAC}"
+    exit 0
+fi
+
 echo ""
 read -rp "Start Nova now? [y/N] " answer
 if [[ "${answer,,}" == "y" ]]; then

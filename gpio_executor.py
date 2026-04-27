@@ -4,9 +4,10 @@ import threading
 import colorsys
 
 # Signal pins (Pi 5 BCM numbering, verified against 40-pin header)
-DATA_PIN = 17   # Grove RGB LED DATA  → Pin 11
+# GPIO 17 and 19 are reserved by ReSpeaker 2-Mics HAT (button and I2S PCM_FS)
+DATA_PIN = 24   # Grove RGB LED DATA  → Pin 18
 CLK_PIN  = 27   # Grove RGB LED CLK   → Pin 13
-MOTOR_PINS = [5, 6, 13, 19]  # ULN2003 IN1-IN4 → Pins 29,31,33,35
+MOTOR_PINS = [5, 6, 13, 26]  # ULN2003 IN1-IN4 → Pins 29,31,33,37
 
 # ⚠️ VCC and GND for LED and motor board come from an external PSU.
 # The external PSU GND must share a common ground with a Pi GND pin
