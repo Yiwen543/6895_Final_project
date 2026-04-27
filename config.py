@@ -11,7 +11,7 @@ elif torch.backends.mps.is_available():
 else:
     LLM_DEVICE = "cpu"
     LLM_DTYPE  = torch.float32
-LLM_MAX_NEW_TOKENS = 160
+LLM_MAX_NEW_TOKENS = 96
 
 # ── STT (Whisper) ─────────────────────────────────────────────────────────────
 WHISPER_MODEL_SIZE   = "tiny.en"
@@ -23,6 +23,7 @@ EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 # ── TTS ───────────────────────────────────────────────────────────────────────
 TTS_RATE = 170
+PIPER_MODEL_PATH = "voices/en_US-lessac-medium.onnx"
 
 # ── Assistant identity ────────────────────────────────────────────────────────
 ASSISTANT_NAME = "nova"

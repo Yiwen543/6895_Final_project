@@ -9,3 +9,4 @@ lgpio
 rpi-lgpio
 piper-tts
 numpy
+sentence-transformers
