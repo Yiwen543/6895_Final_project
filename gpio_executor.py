@@ -14,6 +14,8 @@ MOTOR_PINS = [5, 6, 13, 19]  # ULN2003 IN1-IN4 → Pins 29,31,33,35
 
 CURTAIN_TOTAL_STEPS = 2048  # half-revolution; calibrate after first wiring test
 STEP_DELAY = 0.002          # 2 ms between half-steps
+RGB_HUE_STEP   = 0.01       # hue increment per cycle tick (100 ticks = full spectrum)
+RGB_CYCLE_TICK = 0.1        # seconds between cycle ticks
 
 
 class GPIOExecutor:
@@ -38,6 +40,7 @@ class GPIOExecutor:
         self._curtain_pos = 0
         self._rgb_stop = threading.Event()
         self._rgb_thread = None
+        self._rgb_lock = threading.Lock()
         self._set_color(0, 0, 0)
         self._release_motor()
 
@@ -65,12 +68,17 @@ class GPIOExecutor:
             self._send_bit(0)
 
     def _start_rgb_cycle(self) -> None:
-        self._stop_rgb_cycle()
-        self._rgb_stop.clear()
-        self._rgb_thread = threading.Thread(target=self._rgb_cycle_loop, daemon=True)
-        self._rgb_thread.start()
+        with self._rgb_lock:
+            self._stop_rgb_cycle_unsafe()
+            self._rgb_stop.clear()
+            self._rgb_thread = threading.Thread(target=self._rgb_cycle_loop, daemon=True)
+            self._rgb_thread.start()
 
     def _stop_rgb_cycle(self) -> None:
+        with self._rgb_lock:
+            self._stop_rgb_cycle_unsafe()
+
+    def _stop_rgb_cycle_unsafe(self) -> None:
         if self._rgb_thread and self._rgb_thread.is_alive():
             self._rgb_stop.set()
             self._rgb_thread.join(timeout=0.5)
@@ -80,8 +88,8 @@ class GPIOExecutor:
         while not self._rgb_stop.is_set():
             r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
             self._set_color(int(r * 255), int(g * 255), int(b * 255))
-            hue = (hue + 0.01) % 1.0
-            time.sleep(0.1)
+            hue = (hue + RGB_HUE_STEP) % 1.0
+            time.sleep(RGB_CYCLE_TICK)
 
     def _do_step(self, direction: int) -> None:
         self._step_index = (self._step_index + direction) % 8
@@ -94,6 +102,7 @@ class GPIOExecutor:
             lgpio.gpio_write(self._h, pin, 0)
 
     def _move_to_position(self, target_pct: int) -> None:
+        target_pct = max(0, min(100, target_pct))
         steps = int((target_pct - self._curtain_pos) / 100 * CURTAIN_TOTAL_STEPS)
         direction = 1 if steps >= 0 else -1
         for _ in range(abs(steps)):
@@ -117,7 +126,7 @@ class GPIOExecutor:
                 return 'LIGHT -> OFF'
             if action == 'set_brightness':
                 self._stop_rgb_cycle()
-                v = int(round(2.55 * value))
+                v = int(round(255 / 100 * value))
                 self._set_color(v, v, v)
                 return f'LIGHT -> BRIGHTNESS {value}%'
             if action == 'rgb_cycle':
