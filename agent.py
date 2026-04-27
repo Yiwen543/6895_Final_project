@@ -13,6 +13,9 @@ Four intent types handled:
   invalid                — no response (no "Nova" prefix or empty)
 """
 
+import threading
+from gpio_executor import GPIOExecutor
+from rule_based import try_rule_based
 from typing import Any, Callable, Dict, Optional
 
 from config import ASSISTANT_NAME_VARIANTS
@@ -31,10 +34,12 @@ def contains_assistant_name(text: str) -> bool:
 
 class NovaAgent:
 
-    def __init__(self, llm, memory, speak: Callable[[str], None]):
+    def __init__(self, llm, memory, speak: Callable[[str], None],
+                 gpio: GPIOExecutor = None):
         self._llm    = llm
         self._memory = memory
         self._speak  = speak
+        self._gpio   = gpio
         self._state  = self._blank_state()
 
     @staticmethod
@@ -48,6 +53,29 @@ class NovaAgent:
 
     def reset_dialogue(self):
         self._state = self._blank_state()
+
+    @staticmethod
+    def _rule_reply(semantic: dict) -> str:
+        device = semantic.get("device", "")
+        action = semantic.get("action", "")
+        value  = semantic.get("value")
+        if action == "turn_on":
+            return f"Sure, turning on the {device}."
+        if action == "turn_off":
+            return f"Sure, turning off the {device}."
+        if action == "set_brightness":
+            return f"Sure, setting brightness to {value} percent."
+        if action == "rgb_cycle":
+            return "Sure, starting RGB cycle."
+        if action == "open":
+            return f"Sure, opening the {device}."
+        if action == "close":
+            return f"Sure, closing the {device}."
+        if action == "set_position":
+            return f"Sure, setting {device} to {value} percent."
+        if action == "set_temperature":
+            return f"Sure, setting AC to {value} degrees."
+        return "Done."
 
     # ── Main entry point ──────────────────────────────────────────────────────
 
@@ -113,6 +141,13 @@ class NovaAgent:
             return self._result(False, {"type": "invalid"}, False, "assistant_name_not_detected")
 
         self._memory.push_working("user", text)
+
+        # Rule-based fast path: skip LLM for unambiguous direct commands
+        fast = try_rule_based(text)
+        if fast is not None:
+            fast["reply"] = self._rule_reply(fast)
+            return self._do_direct_command(fast, text, 0.0)
+
         semantic, _, ms = self._llm.parse_unified(text, verbose=verbose)
 
         if semantic["type"] == "direct_command":
@@ -137,12 +172,27 @@ class NovaAgent:
         ok, reason = validate_command(cmd)
         if ok:
             reply = semantic.get("reply") or "Done."
-            self._speak(reply)
+            hw_result = execute_command(cmd)
+
+            # GPIO and TTS run concurrently
+            gpio_thread = threading.Thread(
+                target=self._gpio.execute, args=(cmd,), daemon=True
+            ) if self._gpio else None
+            tts_thread = threading.Thread(
+                target=self._speak, args=(reply,), daemon=True
+            )
+            if gpio_thread:
+                gpio_thread.start()
+            tts_thread.start()
+            if gpio_thread:
+                gpio_thread.join()
+            tts_thread.join()
+
             self._update_pref(cmd)
             self._memory.save_episode(text, "direct_command", reply)
             self._memory.push_working("nova", reply)
             return self._result(True, semantic, True, reason,
-                                execute_command(cmd), reply, round(ms, 3))
+                                hw_result, reply, round(ms, 3))
 
         self._memory.push_working("nova", "(command invalid)")
         return self._result(True, semantic, False, reason, "SKIPPED", None, round(ms, 3))
