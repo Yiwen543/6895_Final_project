@@ -4,9 +4,9 @@
 
 **Goal:** Deploy Nova Smart Home Assistant to Raspberry Pi 5 (8GB) as a systemd service, with Grove RGB LED + 28BYJ-48 stepper motor control via GPIO, Piper TTS, and four latency optimisations (rule-based fast path, parallel GPIO+TTS, max_new_tokens=96, Piper).
 
-**Architecture:** `nova.py` (pipeline) delegates hardware to `gpio_executor.py` (LED + stepper via lgpio). A `rule_based.py` module handles unambiguous commands without LLM. `deploy.sh` runs from the dev machine: rsync → pip install → audio config → systemd registration.
+**Architecture:** The project is already modular: `config.py` (all config), `schema.py` (device schema/validation), `llm_parser.py` (LLMParser class, Qwen2.5-1.5B), `agent.py` (NovaAgent pipeline), `audio.py` (STT/TTS/AudioListener), `memory.py` (MemoryManager). `nova.py` is a thin orchestration entry point that initialises all components and runs `AudioListener`. `gpio_executor.py` is injected into `NovaAgent`. `deploy.sh` runs from the dev machine.
 
-**Tech Stack:** Python 3.11, lgpio (Pi 5 GPIO), piper-tts, faster-whisper, transformers (TinyLlama), sounddevice, PipeWire, systemd, Bluetooth
+**Tech Stack:** Python 3.11, Qwen2.5-1.5B-Instruct, lgpio (Pi 5 GPIO), piper-tts, faster-whisper, transformers, sentence-transformers, sounddevice, PipeWire, systemd, Bluetooth
 
 ---
 
@@ -14,250 +14,42 @@
 
 | File | Action | Responsibility |
 |------|--------|----------------|
-| `rule_based.py` | Create | Regex fast path for direct commands |
+| `rule_based.py` | ✅ Done | Regex fast path for direct commands |
+| `tests/test_rule_based.py` | ✅ Done | Unit tests for try_rule_based() |
+| `requirements_pi.txt` | ✅ Done + update | Pi-specific Python dependencies |
+| `tests/__init__.py` | ✅ Done | Test package marker |
+| `tests/conftest.py` | ✅ Done | Mock lgpio for dev-machine tests |
 | `gpio_executor.py` | Create | P9813 LED + 28BYJ-48 stepper via lgpio |
-| `nova.py` | Create | Main pipeline (refactored from Nova_4_16.ipynb) |
-| `requirements_pi.txt` | Create | Pi-specific Python dependencies |
+| `tests/test_gpio_executor.py` | Create | Unit tests for GPIOExecutor |
+| `config.py` | Modify | Change LLM_MAX_NEW_TOKENS 160→96, add PIPER_MODEL_PATH |
+| `audio.py` | Modify | Replace TTSEngine pyttsx3 → Piper |
+| `agent.py` | Modify | Add gpio param, rule-based fast path, parallel GPIO+TTS |
+| `nova.py` | Create | Thin orchestration entry point |
 | `nova.service` | Create | systemd service for Nova |
 | `bt-speaker.service` | Create | systemd Bluetooth auto-connect |
 | `deploy.sh` | Create | One-command deploy from dev machine |
-| `tests/__init__.py` | Create | Test package marker |
-| `tests/conftest.py` | Create | Mock lgpio for dev-machine tests |
-| `tests/test_gpio_executor.py` | Create | Unit tests for GPIOExecutor |
-| `tests/test_rule_based.py` | Create | Unit tests for try_rule_based() |
-| `Nova_4_16.ipynb` | Read only | Source reference for nova.py — not modified |
 
 ---
 
-### Task 1: Project scaffolding
+### Task 1: Project scaffolding ✅ COMPLETE
 
-**Files:**
-- Create: `requirements_pi.txt`
-- Create: `.gitignore` (append)
-- Create: `tests/__init__.py`
-- Create: `tests/conftest.py`
-
-- [ ] **Step 1: Create requirements_pi.txt**
-
-```
-faster-whisper
-transformers
-accelerate
-sentencepiece
-torch --index-url https://download.pytorch.org/whl/cpu
-sounddevice
-soundfile
-lgpio
-rpi-lgpio
-piper-tts
-numpy
-```
-
-- [ ] **Step 2: Gitignore the Piper voice model**
-
-```bash
-echo "voices/*.onnx" >> .gitignore
-```
-
-- [ ] **Step 3: Create tests/__init__.py**
-
-```bash
-mkdir -p tests && touch tests/__init__.py
-```
-
-- [ ] **Step 4: Create tests/conftest.py**
-
-Injects a mock lgpio into `sys.modules` before any test imports `gpio_executor`, so tests run on macOS/Linux dev machines without Pi hardware.
-
-```python
-import sys
-from unittest.mock import MagicMock
-
-lgpio_mock = MagicMock()
-lgpio_mock.gpiochip_open.return_value = 42
-sys.modules['lgpio'] = lgpio_mock
-```
-
-- [ ] **Step 5: Verify pytest is available**
-
-```bash
-python3 -m pytest --version
-```
-
-Expected: `pytest 7.x.x` or higher. If missing: `pip3 install pytest`.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add requirements_pi.txt .gitignore tests/__init__.py tests/conftest.py
-git commit -m "feat: project scaffolding for Pi 5 deployment"
-```
+Already done. `requirements_pi.txt`, `.gitignore`, `tests/__init__.py`, `tests/conftest.py` all created and committed.
 
 ---
 
-### Task 2: Rule-based fast path tests
+### Task 2: Rule-based fast path ✅ COMPLETE
 
-**Files:**
-- Create: `tests/test_rule_based.py`
-
-- [ ] **Step 1: Write failing tests**
-
-```python
-from rule_based import try_rule_based
-
-
-def test_turn_on_light():
-    assert try_rule_based("Nova, turn on the light") == {
-        "type": "direct_command", "device": "light", "action": "turn_on", "value": None
-    }
-
-
-def test_turn_off_light():
-    assert try_rule_based("Nova, switch off the light") == {
-        "type": "direct_command", "device": "light", "action": "turn_off", "value": None
-    }
-
-
-def test_open_curtain():
-    assert try_rule_based("Nova, open the curtain") == {
-        "type": "direct_command", "device": "curtain", "action": "open", "value": None
-    }
-
-
-def test_close_window():
-    assert try_rule_based("Nova, close the window") == {
-        "type": "direct_command", "device": "window", "action": "close", "value": None
-    }
-
-
-def test_ac_temperature():
-    assert try_rule_based("Nova, set the AC to 24 degrees") == {
-        "type": "direct_command", "device": "ac", "action": "set_temperature", "value": 24
-    }
-
-
-def test_ac_temperature_out_of_range_returns_none():
-    assert try_rule_based("Nova, set the AC to 50 degrees") is None
-
-
-def test_set_brightness():
-    assert try_rule_based("Nova, set brightness to 70") == {
-        "type": "direct_command", "device": "light", "action": "set_brightness", "value": 70
-    }
-
-
-def test_set_curtain_position():
-    assert try_rule_based("Nova, set curtain to 50 percent") == {
-        "type": "direct_command", "device": "curtain", "action": "set_position", "value": 50
-    }
-
-
-def test_rgb_cycle():
-    assert try_rule_based("Nova, RGB cycle") == {
-        "type": "direct_command", "device": "light", "action": "rgb_cycle", "value": None
-    }
-
-
-def test_ambiguous_falls_through():
-    assert try_rule_based("Nova, I feel cold") is None
-    assert try_rule_based("Nova, it's dark") is None
-    assert try_rule_based("Hello") is None
-
-
-def test_case_insensitive():
-    result = try_rule_based("NOVA, TURN ON THE LIGHT")
-    assert result is not None
-    assert result["action"] == "turn_on"
-```
-
-- [ ] **Step 2: Run to confirm failure**
-
-```bash
-python3 -m pytest tests/test_rule_based.py -v
-```
-
-Expected: `ImportError: No module named 'rule_based'`
-
-- [ ] **Step 3: Create rule_based.py**
-
-```python
-import re
-from typing import Optional, Dict, Any
-
-
-def try_rule_based(text: str) -> Optional[Dict[str, Any]]:
-    t = text.lower()
-
-    m = re.search(r"(?:ac|air.?con).*?(\d+)\s*degree|(\d+)\s*degree.*?(?:ac|air.?con)", t)
-    if m:
-        val = int(m.group(1) or m.group(2))
-        if 16 <= val <= 30:
-            return {"type": "direct_command", "device": "ac", "action": "set_temperature", "value": val}
-
-    m = re.search(r"brightness.*?(\d+)|(\d+).*?brightness", t)
-    if m:
-        val = int(m.group(1) or m.group(2))
-        if 0 <= val <= 100:
-            return {"type": "direct_command", "device": "light", "action": "set_brightness", "value": val}
-
-    m = re.search(r"(curtain|window).*?(\d+)\s*(?:percent|%)|(\d+)\s*(?:percent|%).*?(curtain|window)", t)
-    if m:
-        device = m.group(1) or m.group(4)
-        val = int(m.group(2) or m.group(3))
-        if 0 <= val <= 100:
-            return {"type": "direct_command", "device": device, "action": "set_position", "value": val}
-
-    patterns = [
-        (r"\b(?:turn on|switch on)\b.*\blight\b|\blight\b.*\b(?:turn on|switch on)\b",
-         {"device": "light", "action": "turn_on", "value": None}),
-        (r"\b(?:turn off|switch off)\b.*\blight\b|\blight\b.*\b(?:turn off|switch off)\b",
-         {"device": "light", "action": "turn_off", "value": None}),
-        (r"\brgb\b",
-         {"device": "light", "action": "rgb_cycle", "value": None}),
-        (r"\bopen\b.*\bcurtain\b|\bcurtain\b.*\bopen\b",
-         {"device": "curtain", "action": "open", "value": None}),
-        (r"\bclose\b.*\bcurtain\b|\bcurtain\b.*\bclose\b",
-         {"device": "curtain", "action": "close", "value": None}),
-        (r"\bopen\b.*\bwindow\b|\bwindow\b.*\bopen\b",
-         {"device": "window", "action": "open", "value": None}),
-        (r"\bclose\b.*\bwindow\b|\bwindow\b.*\bclose\b",
-         {"device": "window", "action": "close", "value": None}),
-        (r"\b(?:turn on|switch on)\b.*\b(?:ac|air.?con)\b",
-         {"device": "ac", "action": "turn_on", "value": None}),
-        (r"\b(?:turn off|switch off)\b.*\b(?:ac|air.?con)\b",
-         {"device": "ac", "action": "turn_off", "value": None}),
-    ]
-
-    for pat, cmd in patterns:
-        if re.search(pat, t):
-            return {"type": "direct_command", **cmd}
-
-    return None
-```
-
-- [ ] **Step 4: Run tests**
-
-```bash
-python3 -m pytest tests/test_rule_based.py -v
-```
-
-Expected: all 11 tests PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add tests/test_rule_based.py rule_based.py
-git commit -m "feat: rule-based fast path with tests"
-```
+Already done. `rule_based.py` and `tests/test_rule_based.py` created, 11 tests passing, committed.
 
 ---
 
-### Task 3: GPIOExecutor tests
+### Task 3+4: GPIOExecutor tests + implementation
 
 **Files:**
 - Create: `tests/test_gpio_executor.py`
+- Create: `gpio_executor.py`
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Write failing tests — create tests/test_gpio_executor.py**
 
 ```python
 import pytest
@@ -342,7 +134,7 @@ def test_rgb_cycle_starts_and_stops_thread(executor):
 - [ ] **Step 2: Run to confirm failure**
 
 ```bash
-python3 -m pytest tests/test_gpio_executor.py -v
+cd /Users/ezslaptop/Projects/6895_Final_project && python3 -m pytest tests/test_gpio_executor.py -v 2>&1 | head -10
 ```
 
 Expected: `ImportError: No module named 'gpio_executor'`
@@ -350,18 +142,10 @@ Expected: `ImportError: No module named 'gpio_executor'`
 - [ ] **Step 3: Commit failing tests**
 
 ```bash
-git add tests/test_gpio_executor.py
-git commit -m "test: add failing tests for GPIOExecutor"
+cd /Users/ezslaptop/Projects/6895_Final_project && git add tests/test_gpio_executor.py && git commit -m "test: add failing tests for GPIOExecutor"
 ```
 
----
-
-### Task 4: GPIOExecutor implementation
-
-**Files:**
-- Create: `gpio_executor.py`
-
-- [ ] **Step 1: Create gpio_executor.py**
+- [ ] **Step 4: Create gpio_executor.py**
 
 ```python
 import lgpio
@@ -419,7 +203,7 @@ class GPIOExecutor:
             self._send_bit((byte >> i) & 1)
 
     def _set_color(self, r: int, g: int, b: int) -> None:
-        for _ in range(32):          # start frame
+        for _ in range(32):
             self._send_bit(0)
         prefix = 0xC0
         prefix |= ((~b) & 0xC0) >> 2
@@ -429,7 +213,7 @@ class GPIOExecutor:
         self._send_byte(b & 0xFF)
         self._send_byte(g & 0xFF)
         self._send_byte(r & 0xFF)
-        for _ in range(32):          # end frame
+        for _ in range(32):
             self._send_bit(0)
 
     def _start_rgb_cycle(self) -> None:
@@ -516,161 +300,142 @@ class GPIOExecutor:
         lgpio.gpiochip_close(self._h)
 ```
 
-- [ ] **Step 2: Run tests**
+- [ ] **Step 5: Run tests — must all pass**
 
 ```bash
-python3 -m pytest tests/test_gpio_executor.py -v
+cd /Users/ezslaptop/Projects/6895_Final_project && python3 -m pytest tests/test_gpio_executor.py -v
 ```
 
-Expected: all 10 tests PASS.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add gpio_executor.py
-git commit -m "feat: GPIOExecutor — P9813 RGB LED and 28BYJ-48 stepper via lgpio"
-```
-
----
-
-### Task 5: nova.py — read notebook and build core structure
-
-**Files:**
-- Read: `Nova_4_16.ipynb`
-- Create: `nova.py`
-
-- [ ] **Step 1: Dump the full notebook source for reference**
-
-```bash
-python3 -c "
-import json
-with open('Nova_4_16.ipynb') as f:
-    nb = json.load(f)
-for i, cell in enumerate(nb['cells']):
-    print(f'=== Cell {i} ===')
-    print(''.join(cell['source']))
-    print()
-" 2>/dev/null | less
-```
-
-Note: (a) the exact `max_new_tokens` value in the `model.generate()` call, (b) the complete `handle_transcribed_text` function body, (c) the complete main audio loop, (d) all helper functions in Sections 5–9.
-
-- [ ] **Step 2: Create nova.py — header and imports**
-
-```python
-#!/usr/bin/env python3
-"""Nova Smart Home Assistant — Raspberry Pi 5 service entry point."""
-
-import os
-import io
-import re
-import gc
-import json
-import time
-import wave
-import threading
-import numpy as np
-import sounddevice as sd
-import soundfile as sf
-import torch
-
-from typing import Dict, Any, Optional, Tuple
-from collections import deque
-from faster_whisper import WhisperModel
-from transformers import AutoTokenizer, AutoModelForCausalLM, StoppingCriteria, StoppingCriteriaList
-from piper.voice import PiperVoice
-
-from rule_based import try_rule_based
-from gpio_executor import GPIOExecutor
-
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-SAMPLE_RATE = 16000
-CHANNELS = 1
-PIPER_MODEL_PATH = os.path.join(_SCRIPT_DIR, "voices", "en_US-lessac-medium.onnx")
-LLM_MODEL_NAME = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-```
-
-- [ ] **Step 3: Copy Sections 3 and 4 from notebook verbatim**
-
-From the notebook dump (Step 1), copy into nova.py:
-- Section 3: `COMMAND_SCHEMA`, `INVALID_COMMAND`, `validate_command`, `execute_command`, `build_execution_reply`
-- Section 4: `ASSISTANT_NAME`, `ASSISTANT_NAME_VARIANTS`, `contains_assistant_name`
-
-Do not modify any of these.
-
-- [ ] **Step 4: Copy Section 5 from notebook — change max_new_tokens to 96**
-
-Copy `UNIFIED_SYSTEM_PROMPT`, `FOLLOWUP_RESOLUTION_SYSTEM_PROMPT`, and all LLM helper functions (`extract_first_json_object`, `normalize_unified_result`, `llm_generate_json`, `llm_parse_unified`, `llm_resolve_followup`) verbatim from the notebook.
-
-Then find the `model.generate()` call (inside `llm_generate_json` or equivalent) and change its `max_new_tokens` parameter to `96`:
-
-```python
-outputs = model.generate(
-    input_ids,
-    max_new_tokens=96,      # JSON output fits in 80 tokens; cap to avoid waste
-    do_sample=False,
-    temperature=1.0,
-    pad_token_id=tokenizer.eos_token_id,
-)
-```
-
-- [ ] **Step 5: Copy Section 6 STT init from notebook verbatim**
-
-```python
-print("Loading STT model...")
-stt_model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
-print("STT ready.")
-```
+Expected: 10 tests PASSED.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add nova.py
-git commit -m "feat: nova.py core — schema, LLM, STT, max_new_tokens=96"
+cd /Users/ezslaptop/Projects/6895_Final_project && git add gpio_executor.py && git commit -m "feat: GPIOExecutor — P9813 RGB LED and 28BYJ-48 stepper via lgpio"
 ```
 
 ---
 
-### Task 6: nova.py — Piper TTS
+### Task 5: config.py update + nova.py entry point
 
 **Files:**
-- Modify: `nova.py`
+- Modify: `config.py` — change `LLM_MAX_NEW_TOKENS`, add `PIPER_MODEL_PATH`
+- Modify: `requirements_pi.txt` — add `sentence-transformers`
+- Create: `nova.py` — thin orchestration entry point
 
-- [ ] **Step 1: Add Piper TTS init and speak() function**
+**Context:** The project is already modular. `nova.py` only needs to import and wire together existing components: `LLMParser`, `MemoryManager`, `STTModel`, `TTSEngine` (Piper, after Task 6), `GPIOExecutor`, `NovaAgent`, and `AudioListener`.
 
-Add after the STT init block in nova.py:
+- [ ] **Step 1: Update config.py — change LLM_MAX_NEW_TOKENS and add PIPER_MODEL_PATH**
 
+In `config.py`, change:
 ```python
-# ── TTS ────────────────────────────────────────────────────────────────────────
-print("Loading Piper TTS...")
-_piper_voice = PiperVoice.load(PIPER_MODEL_PATH)
-print("TTS ready.")
-
-
-def speak(text: str) -> None:
-    wav_buf = io.BytesIO()
-    with wave.open(wav_buf, 'wb') as wf:
-        _piper_voice.synthesize(text, wf)
-    wav_buf.seek(0)
-    with wave.open(wav_buf, 'rb') as wf:
-        frames = wf.readframes(wf.getnframes())
-        rate = wf.getframerate()
-    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-    sd.play(audio, rate)
-    sd.wait()
+LLM_MAX_NEW_TOKENS = 160
+```
+to:
+```python
+LLM_MAX_NEW_TOKENS = 96
 ```
 
-- [ ] **Step 2: Download Piper voice model locally for testing**
+And add after the `# ── TTS` block:
+```python
+PIPER_MODEL_PATH = "voices/en_US-lessac-medium.onnx"
+```
+
+- [ ] **Step 2: Add sentence-transformers to requirements_pi.txt**
+
+Append to `requirements_pi.txt`:
+```
+sentence-transformers
+```
+
+- [ ] **Step 3: Create nova.py**
+
+```python
+#!/usr/bin/env python3
+"""Nova Smart Home Assistant — Raspberry Pi 5 entry point."""
+
+import os
+import sys
+
+from sentence_transformers import SentenceTransformer
+
+from audio import AudioListener, STTModel, TTSEngine
+from llm_parser import LLMParser
+from memory import MemoryManager
+from agent import NovaAgent
+from gpio_executor import GPIOExecutor
+from config import EMBED_MODEL_NAME
+
+
+def main() -> None:
+    print("=== Nova starting up ===")
+
+    stt    = STTModel()
+    tts    = TTSEngine()
+    llm    = LLMParser()
+    embed  = SentenceTransformer(EMBED_MODEL_NAME)
+    memory = MemoryManager(embed)
+    gpio   = GPIOExecutor()
+
+    nova = NovaAgent(llm=llm, memory=memory, speak=tts.speak, gpio=gpio)
+
+    listener = AudioListener(agent=nova, stt=stt)
+
+    print("=== Nova ready. Listening... ===")
+    try:
+        listener.continuous_loop()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        gpio.cleanup()
+        print("Nova shut down.")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+- [ ] **Step 4: Verify nova.py imports resolve (no runtime errors on import)**
 
 ```bash
-mkdir -p voices
+cd /Users/ezslaptop/Projects/6895_Final_project && python3 -c "
+import sys
+# mock lgpio so gpio_executor imports cleanly on dev machine
+from unittest.mock import MagicMock
+sys.modules['lgpio'] = MagicMock()
+import config, schema, llm_parser, agent, rule_based
+print('All imports OK')
+"
+```
+
+Expected: `All imports OK`
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /Users/ezslaptop/Projects/6895_Final_project && git add config.py requirements_pi.txt nova.py && git commit -m "feat: nova.py entry point, max_new_tokens=96, add sentence-transformers"
+```
+
+---
+
+### Task 6: Piper TTS — replace TTSEngine in audio.py
+
+**Files:**
+- Modify: `audio.py` — replace `TTSEngine` pyttsx3 implementation with Piper
+- Create: `voices/` directory + download voice model
+
+**Context:** `TTSEngine` is instantiated in `nova.py` and passed to `NovaAgent` as `speak=tts.speak`. The interface must stay identical: `speak(text: str, verbose: bool = True)`. Only the internals change.
+
+- [ ] **Step 1: Download Piper voice model**
+
+```bash
+mkdir -p /Users/ezslaptop/Projects/6895_Final_project/voices
 python3 -c "
 import urllib.request, os
 url = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx'
 path = 'voices/en_US-lessac-medium.onnx'
 if not os.path.exists(path):
-    print('Downloading...')
+    print('Downloading Piper voice model (~60MB)...')
     urllib.request.urlretrieve(url, path)
     print('Done.')
 else:
@@ -680,107 +445,182 @@ else:
 
 Expected: `Done.` or `Already present.`
 
-- [ ] **Step 3: Smoke-test TTS**
+- [ ] **Step 2: Replace TTSEngine in audio.py**
+
+Replace the entire `TTSEngine` class (from `class TTSEngine:` to the end of `runAndWait()`) with:
+
+```python
+class TTSEngine:
+    """Piper-based TTS. Interface unchanged: speak(text, verbose=True)."""
+
+    def __init__(self, model_path: str = None):
+        from piper.voice import PiperVoice
+        import wave, io
+        from config import PIPER_MODEL_PATH
+        _path = model_path or PIPER_MODEL_PATH
+        print(f"Loading Piper TTS ({_path}) ...")
+        self._voice = PiperVoice.load(_path)
+        self._wave  = wave
+        self._io    = io
+        print("TTS ready.")
+
+    def speak(self, text: str, verbose: bool = True) -> None:
+        if verbose:
+            print("[TTS]", text)
+        try:
+            wav_buf = self._io.BytesIO()
+            with self._wave.open(wav_buf, 'wb') as wf:
+                self._voice.synthesize(text, wf)
+            wav_buf.seek(0)
+            with self._wave.open(wav_buf, 'rb') as wf:
+                frames = wf.readframes(wf.getnframes())
+                rate   = wf.getframerate()
+            import numpy as np
+            import sounddevice as sd
+            audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+            sd.play(audio, rate)
+            sd.wait()
+        except Exception as e:
+            print("[TTS ERROR]", e)
+```
+
+Also remove the `import pyttsx3` line at the top of `audio.py` (it is no longer needed).
+
+- [ ] **Step 3: Smoke-test Piper TTS**
 
 ```bash
-python3 -c "
-import sys; sys.path.insert(0, '.')
-from nova import speak
-speak('Hello, I am Nova.')
+cd /Users/ezslaptop/Projects/6895_Final_project && python3 -c "
+from audio import TTSEngine
+tts = TTSEngine()
+tts.speak('Hello, I am Nova.')
 "
 ```
 
-Expected: voice plays through default audio output. If silent: confirm PipeWire is running (`systemctl --user status pipewire`) and a speaker is connected.
+Expected: voice plays through speakers. If silent, check default audio output device.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add nova.py
-git commit -m "feat: Piper TTS in nova.py, replaces pyttsx3"
+cd /Users/ezslaptop/Projects/6895_Final_project && git add audio.py && git commit -m "feat: Piper TTS in TTSEngine, replaces pyttsx3"
 ```
 
 ---
 
-### Task 7: nova.py — GPIO, parallel execution, handler, main loop
+### Task 7: agent.py — GPIO injection, rule-based fast path, parallel execution
 
 **Files:**
-- Modify: `nova.py`
+- Modify: `agent.py` — add `gpio` param, rule-based fast path, parallel GPIO+TTS
 
-- [ ] **Step 1: Add GPIOExecutor init**
+**Context:** `NovaAgent.__init__` currently takes `llm`, `memory`, `speak`. We add `gpio: GPIOExecutor` as a fourth parameter. The rule-based fast path runs before `self._llm.parse_unified()` in `_handle_new_request`. For `direct_command`, GPIO execution and TTS run concurrently in two threads.
 
-Add after the TTS block:
+- [ ] **Step 1: Add gpio import and update __init__**
 
+At the top of `agent.py`, add:
 ```python
-# ── GPIO ───────────────────────────────────────────────────────────────────────
-print("Initialising GPIO...")
-gpio = GPIOExecutor()
-print("GPIO ready.")
+import threading
+from gpio_executor import GPIOExecutor
+from rule_based import try_rule_based
 ```
 
-- [ ] **Step 2: Add parallel execution helper**
-
+Change `NovaAgent.__init__` signature and body:
 ```python
-def _execute_and_speak(cmd: dict, reply_text: str) -> None:
-    gpio_thread = threading.Thread(target=gpio.execute, args=(cmd,), daemon=True)
-    tts_thread  = threading.Thread(target=speak, args=(reply_text,), daemon=True)
-    gpio_thread.start()
-    tts_thread.start()
-    gpio_thread.join()
-    tts_thread.join()
+def __init__(self, llm, memory, speak: Callable[[str], None],
+             gpio: GPIOExecutor = None):
+    self._llm    = llm
+    self._memory = memory
+    self._speak  = speak
+    self._gpio   = gpio
+    self._state  = self._blank_state()
 ```
 
-- [ ] **Step 3: Copy handle_transcribed_text from notebook, apply three patches**
+- [ ] **Step 2: Add rule-based fast path in _handle_new_request**
 
-Copy the complete `handle_transcribed_text` function from Section 8 of the notebook, then apply exactly these three edits:
-
-**Patch A — rule-based fast path** (add before the `llm_parse_unified` call):
-```python
-fast_result = try_rule_based(text)
-if fast_result is not None:
-    semantic = fast_result
-    llm_latency_ms = 0.0
-    raw_output = "(rule-based)"
-else:
-    semantic, raw_output, llm_latency_ms = llm_parse_unified(text, verbose=verbose)
-```
-
-**Patch B — parallel GPIO + TTS** (replace the `direct_command` branch's speak call):
-```python
-# Replace:  execute_command(cmd); speak(build_execution_reply(cmd))
-# With:
-hw_result = execute_command(cmd)
-reply     = build_execution_reply(cmd)
-_execute_and_speak(cmd, reply)
-```
-
-**Patch C — no changes** to `needs_clarification`, `general_qa`, and `invalid` branches; they call `speak()` directly which is correct.
-
-- [ ] **Step 4: Copy transcribe_audio_numpy from notebook Section 7 verbatim**
-
-The function is already in the notebook (uses `io.BytesIO`, no disk I/O). Copy it unchanged.
-
-- [ ] **Step 5: Copy the main audio loop from notebook Section 9 verbatim**
-
-Copy `collect_one_utterance_from_stream` and the main loop function unchanged.
-
-- [ ] **Step 6: Add entry point with cleanup**
+In `_handle_new_request`, insert before the `self._llm.parse_unified(text, verbose=verbose)` call:
 
 ```python
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        gpio.cleanup()
-        print("Nova shut down.")
+# Rule-based fast path: skip LLM for unambiguous direct commands
+fast = try_rule_based(text)
+if fast is not None:
+    fast["reply"] = fast.get("reply") or self._rule_reply(fast)
+    return self._do_direct_command(fast, text, 0.0)
+
+semantic, _, ms = self._llm.parse_unified(text, verbose=verbose)
 ```
 
-- [ ] **Step 7: Commit**
+Add helper method to `NovaAgent`:
+```python
+@staticmethod
+def _rule_reply(semantic: dict) -> str:
+    device = semantic.get("device", "")
+    action = semantic.get("action", "")
+    value  = semantic.get("value")
+    if action == "turn_on":
+        return f"Sure, turning on the {device}."
+    if action == "turn_off":
+        return f"Sure, turning off the {device}."
+    if action == "set_brightness":
+        return f"Sure, setting brightness to {value} percent."
+    if action == "rgb_cycle":
+        return "Sure, starting RGB cycle."
+    if action == "open":
+        return f"Sure, opening the {device}."
+    if action == "close":
+        return f"Sure, closing the {device}."
+    if action == "set_position":
+        return f"Sure, setting {device} to {value} percent."
+    if action == "set_temperature":
+        return f"Sure, setting AC to {value} degrees."
+    return "Done."
+```
+
+- [ ] **Step 3: Add parallel GPIO + TTS in _do_direct_command**
+
+Replace the `_do_direct_command` method body with:
+
+```python
+def _do_direct_command(self, semantic, text, ms) -> Dict[str, Any]:
+    cmd = {k: semantic[k] for k in ("device", "action", "value")}
+    ok, reason = validate_command(cmd)
+    if ok:
+        reply = semantic.get("reply") or "Done."
+        hw_result = execute_command(cmd)
+
+        # GPIO and TTS run concurrently
+        gpio_thread = threading.Thread(
+            target=self._gpio.execute, args=(cmd,), daemon=True
+        ) if self._gpio else None
+        tts_thread = threading.Thread(
+            target=self._speak, args=(reply,), daemon=True
+        )
+        if gpio_thread:
+            gpio_thread.start()
+        tts_thread.start()
+        if gpio_thread:
+            gpio_thread.join()
+        tts_thread.join()
+
+        self._update_pref(cmd)
+        self._memory.save_episode(text, "direct_command", reply)
+        self._memory.push_working("nova", reply)
+        return self._result(True, semantic, True, reason,
+                            hw_result, reply, round(ms, 3))
+
+    self._memory.push_working("nova", "(command invalid)")
+    return self._result(True, semantic, False, reason, "SKIPPED", None, round(ms, 3))
+```
+
+- [ ] **Step 4: Run all tests to confirm nothing broken**
 
 ```bash
-git add nova.py
-git commit -m "feat: GPIO integration, rule-based fast path, parallel execution in nova.py"
+cd /Users/ezslaptop/Projects/6895_Final_project && python3 -m pytest tests/ -v
+```
+
+Expected: all tests PASS (test_rule_based.py + test_gpio_executor.py).
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /Users/ezslaptop/Projects/6895_Final_project && git add agent.py && git commit -m "feat: agent.py — GPIO injection, rule-based fast path, parallel execution"
 ```
 
 ---
@@ -835,8 +675,7 @@ WantedBy=multi-user.target
 - [ ] **Step 3: Commit**
 
 ```bash
-git add bt-speaker.service nova.service
-git commit -m "feat: systemd service files for Nova and Bluetooth speaker"
+cd /Users/ezslaptop/Projects/6895_Final_project && git add bt-speaker.service nova.service && git commit -m "feat: systemd service files for Nova and Bluetooth speaker"
 ```
 
 ---
@@ -915,25 +754,18 @@ if [[ "${answer,,}" == "y" ]]; then
 fi
 ```
 
-- [ ] **Step 2: Make executable**
+- [ ] **Step 2: Make executable and syntax check**
 
 ```bash
-chmod +x deploy.sh
-```
-
-- [ ] **Step 3: Syntax check**
-
-```bash
-bash -n deploy.sh && echo "Syntax OK"
+chmod +x deploy.sh && bash -n deploy.sh && echo "Syntax OK"
 ```
 
 Expected: `Syntax OK`
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add deploy.sh
-git commit -m "feat: one-command deploy.sh for Pi 5"
+cd /Users/ezslaptop/Projects/6895_Final_project && git add deploy.sh && git commit -m "feat: one-command deploy.sh for Pi 5"
 ```
 
 ---
@@ -944,28 +776,26 @@ git commit -m "feat: one-command deploy.sh for Pi 5"
 
 | Spec requirement | Covered by |
 |-----------------|-----------|
-| File structure (nova.py, gpio_executor.py, deploy.sh, services) | Tasks 4–9 |
-| Pi 5 uses lgpio, not RPi.GPIO | Task 4 (gpio_executor.py constants) |
-| GPIO 17/27 for RGB LED (DATA/CLK) | Task 4 |
-| GPIO 5/6/13/19 for stepper | Task 4 |
-| External PSU + common ground note | Task 4 (comment in gpio_executor.py) |
-| P9813 full action mapping (turn_on/off, brightness, rgb_cycle) | Task 4 |
-| Stepper half-step, position tracking, curtain open/close/set_position | Task 4 |
-| SunFounder USB mic → default PipeWire input | Task 9 (deploy.sh) |
+| Pi 5 uses lgpio, not RPi.GPIO | Task 3+4 |
+| GPIO 17/27 RGB LED, GPIO 5/6/13/19 stepper | Task 3+4 |
+| External PSU + common ground note | Task 3+4 (comment in gpio_executor.py) |
+| P9813 full action mapping | Task 3+4 |
+| Stepper half-step + position tracking | Task 3+4 |
+| max_new_tokens=96 | Task 5 (config.py) |
+| nova.py thin orchestration entry point | Task 5 |
+| sentence-transformers in requirements | Task 5 |
+| Piper TTS replaces pyttsx3 in TTSEngine | Task 6 |
+| Rule-based fast path in agent.py | Task 7 |
+| Parallel GPIO + TTS execution | Task 7 |
+| GPIO injected into NovaAgent | Task 7 |
+| SunFounder USB mic → default PipeWire input | Task 9 |
 | Bluetooth auto-connect via bt-speaker.service | Tasks 8–9 |
-| Piper TTS replaces pyttsx3 | Tasks 6, 9 |
-| Rule-based fast path (~70% commands skip LLM) | Tasks 2, 7 |
-| GPIO + TTS parallel execution | Task 7 |
-| max_new_tokens=96 | Task 5 |
-| deploy.sh: rsync + pip + Piper model + USB mic + systemd | Task 9 |
 | nova.service After=bt-speaker.service | Task 8 |
-| Restart=on-failure, WorkingDirectory=/home/pi/nova | Task 8 |
-
-**Placeholder scan:** No TBD, no TODO, no "similar to Task N". All code blocks complete.
+| deploy.sh: rsync + pip + Piper model + systemd | Task 9 |
 
 **Type consistency:**
-- `GPIOExecutor.execute(cmd: dict) -> str` — defined Task 4, used Task 7 ✅
-- `try_rule_based(text: str) -> Optional[Dict]` — defined Task 2, imported Task 7 ✅
-- `speak(text: str) -> None` — defined Task 6, used Task 7 ✅
-- `_execute_and_speak(cmd, reply_text)` — defined and used Task 7 ✅
-- `gpio.cleanup()` — defined Task 4, called Task 7 ✅
+- `GPIOExecutor.execute(cmd: dict) -> str` — defined Task 3+4, used Task 7 ✅
+- `try_rule_based(text: str)` — defined Task 2 (done), imported Task 7 ✅
+- `TTSEngine.speak(text, verbose)` — interface unchanged Tasks 6–7 ✅
+- `NovaAgent(llm, memory, speak, gpio)` — defined Task 7, constructed Task 5 ✅
+- `gpio.cleanup()` — defined Task 3+4, called in nova.py Task 5 ✅
