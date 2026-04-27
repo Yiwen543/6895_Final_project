@@ -2,16 +2,9 @@ import torch
 
 # ── LLM ──────────────────────────────────────────────────────────────────────
 LLM_MODEL_NAME     = "Qwen/Qwen2.5-1.5B-Instruct"
-if torch.cuda.is_available():
-    LLM_DEVICE = "cuda"
-    LLM_DTYPE  = torch.float16
-elif torch.backends.mps.is_available():
-    LLM_DEVICE = "mps"
-    LLM_DTYPE  = torch.float16
-else:
-    LLM_DEVICE = "cpu"
-    LLM_DTYPE  = torch.float32
-LLM_MAX_NEW_TOKENS = 160
+LLM_DEVICE         = "cuda" if torch.cuda.is_available() else "cpu"
+LLM_DTYPE          = torch.float16 if LLM_DEVICE == "cuda" else torch.float32
+LLM_MAX_NEW_TOKENS = 96
 
 # ── STT (Whisper) ─────────────────────────────────────────────────────────────
 WHISPER_MODEL_SIZE   = "tiny.en"

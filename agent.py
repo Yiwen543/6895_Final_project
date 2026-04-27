@@ -18,7 +18,6 @@ from typing import Any, Callable, Dict, Optional
 from config import ASSISTANT_NAME_VARIANTS
 from schema import (
     build_clarification_reply,
-    build_execution_reply,
     execute_command,
     option_to_display,
     validate_command,
@@ -80,7 +79,7 @@ class NovaAgent:
             cmd = {k: semantic[k] for k in ("device", "action", "value")}
             ok, reason = validate_command(cmd)
             if ok:
-                reply = build_execution_reply(cmd)
+                reply = semantic.get("reply") or "Done."
                 self._speak(reply)
                 self._memory.record_skill(self._state["original_text"], cmd)
                 self._update_pref(cmd)
@@ -137,7 +136,7 @@ class NovaAgent:
         cmd = {k: semantic[k] for k in ("device", "action", "value")}
         ok, reason = validate_command(cmd)
         if ok:
-            reply = build_execution_reply(cmd)
+            reply = semantic.get("reply") or "Done."
             self._speak(reply)
             self._update_pref(cmd)
             self._memory.save_episode(text, "direct_command", reply)
@@ -155,7 +154,8 @@ class NovaAgent:
             cmd = known["action"]
             ok, reason = validate_command(cmd)
             if ok:
-                reply = build_execution_reply(cmd) + " (based on your past preference)"
+                action_label = f"{cmd['device']} {cmd['action']}".replace("_", " ")
+                reply = f"Sure, {action_label}. (based on your past preference)"
                 self._speak(reply)
                 self._memory.record_skill(text, cmd)
                 self._update_pref(cmd)

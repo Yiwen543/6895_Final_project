@@ -18,7 +18,7 @@ from transformers import (
     StoppingCriteriaList,
 )
 
-from config import LLM_MODEL_NAME, LLM_DTYPE, LLM_MAX_NEW_TOKENS
+from config import LLM_MODEL_NAME, LLM_DEVICE, LLM_DTYPE, LLM_MAX_NEW_TOKENS
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -28,9 +28,9 @@ Return exactly one JSON object and nothing else.
 
 Allowed outputs:
 
-{"type":"direct_command","device":"light|curtain|window|ac","action":"turn_on|turn_off|set_brightness|rgb_cycle|open|close|set_position|set_temperature","value":null_or_int}
+{"type":"direct_command","device":"light|curtain|window|ac","action":"turn_on|turn_off|set_brightness|rgb_cycle|open|close|set_position|set_temperature","value":null_or_int,"reply":"brief natural-language confirmation"}
 
-{"type":"needs_clarification","question":"...","options":["...","..."]}
+{"type":"needs_clarification","question":"...","options":["...","..."],"reply":"the question restated naturally for speech"}
 
 {"type":"general_qa","answer":"..."}
 
@@ -39,10 +39,12 @@ Allowed outputs:
 CRITICAL classification rules:
 
 direct_command: ONLY when the user explicitly names BOTH a device (light/curtain/window/ac) AND a specific action (turn on/off, open/close, set to X). No ambiguity allowed.
+  → reply: a short, friendly confirmation of the action taken. e.g. "Sure, turning on the light!"
 
-needs_clarification: When the user describes how they FEEL about the home environment (cold, hot, dark, bright, stuffy, boring) OR expresses frustration, annoyance, or a vague atmosphere preference about a home device — WITHOUT specifying a concrete action. This includes colloquial complaints like "fuck this light" or desires like "make it lively".
+needs_clarification: When the user describes how they FEEL about the home environment (cold, hot, dark, bright, stuffy, boring) OR expresses frustration, annoyance, or a vague atmosphere preference about a home device — WITHOUT specifying a concrete action.
+  → reply: the clarification question in natural speech form.
 
-general_qa: When the user asks about ANY topic that is NOT about controlling home devices. Includes food, cooking, eating, food safety, health, science, weather, time, general knowledge. Even if the sentence mentions physical objects, if it asks for general knowledge rather than device control, use general_qa.
+general_qa: When the user asks about ANY topic NOT about controlling home devices. Includes food, cooking, eating, food safety, health, science, weather, time, general knowledge.
 
 invalid: When there is no meaningful request.
 
@@ -53,46 +55,46 @@ DO NOT use general_qa for complaints or feelings about the home environment — 
 Examples:
 
 Input: Nova, turn on the light.
-Output: {"type":"direct_command","device":"light","action":"turn_on","value":null}
+Output: {"type":"direct_command","device":"light","action":"turn_on","value":null,"reply":"Sure, turning on the light!"}
 
 Input: Nova, turn off the light.
-Output: {"type":"direct_command","device":"light","action":"turn_off","value":null}
+Output: {"type":"direct_command","device":"light","action":"turn_off","value":null,"reply":"Got it, light is off."}
 
 Input: Nova, set the AC to 24 degrees.
-Output: {"type":"direct_command","device":"ac","action":"set_temperature","value":24}
+Output: {"type":"direct_command","device":"ac","action":"set_temperature","value":24,"reply":"Setting the AC to 24 degrees."}
 
 Input: Nova, open the curtain.
-Output: {"type":"direct_command","device":"curtain","action":"open","value":null}
+Output: {"type":"direct_command","device":"curtain","action":"open","value":null,"reply":"Opening the curtain for you."}
 
 Input: Nova, close the window.
-Output: {"type":"direct_command","device":"window","action":"close","value":null}
+Output: {"type":"direct_command","device":"window","action":"close","value":null,"reply":"Closing the window now."}
 
 Input: Nova, I feel cold.
-Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"]}
+Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"],"reply":"Would you like me to close the window or raise the AC temperature?"}
 
 Input: Nova, I feel a little bit cold.
-Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"]}
+Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"],"reply":"Would you like me to close the window or raise the AC temperature?"}
 
 Input: Nova, it's a bit dark.
-Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
+Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"],"reply":"Would you like me to turn on the light or open the curtain?"}
 
 Input: Nova, this room is too dark.
-Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
+Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"],"reply":"Would you like me to turn on the light or open the curtain?"}
 
 Input: Nova, I feel hot.
-Output: {"type":"needs_clarification","question":"Would you like me to open the window or lower the AC temperature?","options":["open_window","lower_ac_temperature"]}
+Output: {"type":"needs_clarification","question":"Would you like me to open the window or lower the AC temperature?","options":["open_window","lower_ac_temperature"],"reply":"Would you like me to open the window or lower the AC temperature?"}
 
 Input: Nova, fuck this light.
-Output: {"type":"needs_clarification","question":"Would you like me to turn off the light or dim it?","options":["turn_off_light","dim_light"]}
+Output: {"type":"needs_clarification","question":"Would you like me to turn off the light or dim it?","options":["turn_off_light","dim_light"],"reply":"Would you like me to turn off the light or dim it?"}
 
 Input: Nova, this light is annoying.
-Output: {"type":"needs_clarification","question":"Would you like me to turn off the light or dim it?","options":["turn_off_light","dim_light"]}
+Output: {"type":"needs_clarification","question":"Would you like me to turn off the light or dim it?","options":["turn_off_light","dim_light"],"reply":"Would you like me to turn off the light or dim it?"}
 
 Input: Nova, make this room lively.
-Output: {"type":"needs_clarification","question":"Would you like me to turn on the RGB cycle or open the curtain?","options":["rgb_cycle","open_curtain"]}
+Output: {"type":"needs_clarification","question":"Would you like me to turn on the RGB cycle or open the curtain?","options":["rgb_cycle","open_curtain"],"reply":"Would you like me to turn on the RGB cycle or open the curtain?"}
 
 Input: Nova, it's boring in here.
-Output: {"type":"needs_clarification","question":"Would you like me to turn on the RGB cycle or open the curtain?","options":["rgb_cycle","open_curtain"]}
+Output: {"type":"needs_clarification","question":"Would you like me to turn on the RGB cycle or open the curtain?","options":["rgb_cycle","open_curtain"],"reply":"Would you like me to turn on the RGB cycle or open the curtain?"}
 
 Input: Nova, how do I eat an apple?
 Output: {"type":"general_qa","answer":"Wash it first, then eat it."}
@@ -118,14 +120,14 @@ Return exactly one JSON object and nothing else.
 Allowed output types:
 
 1. direct_command
-{"type":"direct_command","device":"light|curtain|window|ac","action":"turn_on|turn_off|set_brightness|rgb_cycle|open|close|set_position|set_temperature","value":null_or_int}
+{"type":"direct_command","device":"light|curtain|window|ac","action":"turn_on|turn_off|set_brightness|rgb_cycle|open|close|set_position|set_temperature","value":null_or_int,"reply":"brief natural-language confirmation"}
 
 2. invalid
 {"type":"invalid"}
 
 Rules:
 - Use the previous user request, the clarification question, the available options, and the current reply.
-- If the reply clearly selects one option, return direct_command.
+- If the reply clearly selects one option, return direct_command with a friendly reply field.
 - If the reply is unclear, return invalid.
 - No explanation. No markdown. No extra text.
 """.strip()
@@ -158,11 +160,17 @@ class LLMParser:
     """Loads the LLM once; exposes parse_unified / resolve_followup / answer_qa."""
 
     def __init__(self, model_name: str = LLM_MODEL_NAME, dtype=LLM_DTYPE):
-        print(f"Loading LLM ({model_name}) on {LLM_DTYPE} ...")
+        print(f"Loading LLM ({model_name}) on {LLM_DEVICE} ({dtype}) ...")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name, torch_dtype=dtype, device_map="auto"
-        )
+        # MPS doesn't support device_map="auto"; use explicit device instead
+        if LLM_DEVICE == "mps":
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name, torch_dtype=dtype
+            ).to("mps")
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name, torch_dtype=dtype, device_map="auto"
+            )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.model.eval()
@@ -222,7 +230,9 @@ class LLMParser:
                 v = value.strip().replace("%", "")
                 if re.fullmatch(r"\d{1,3}", v):
                     value = int(v)
-            return {"type": "direct_command", "device": device, "action": action, "value": value}
+            reply = str(obj.get("reply", "")).strip()
+            return {"type": "direct_command", "device": device, "action": action,
+                    "value": value, "reply": reply}
 
         if t == "needs_clarification":
             question = obj.get("question", "")
@@ -232,7 +242,9 @@ class LLMParser:
             options = [str(x).strip() for x in options if str(x).strip()]
             if not options:
                 return {"type": "invalid"}
-            return {"type": "needs_clarification", "question": question.strip(), "options": options}
+            reply = str(obj.get("reply", question)).strip()
+            return {"type": "needs_clarification", "question": question.strip(),
+                    "options": options, "reply": reply}
 
         if t == "general_qa":
             answer = obj.get("answer", "")

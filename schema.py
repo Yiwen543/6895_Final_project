@@ -1,4 +1,18 @@
+"""
+schema.py — device schema, validation, and execution.
+
+Design principles:
+  - validate_command: purely data-driven from COMMAND_SCHEMA, no if-else
+  - execute_command:  dict lookup table, no if-else
+  - build_execution_reply is intentionally ABSENT: the LLM generates
+    a natural-language "reply" field directly inside the JSON output,
+    so no hardcoded reply templates are needed here.
+"""
+
 from typing import Any, Dict, List, Tuple
+
+# ── Device capability schema ──────────────────────────────────────────────────
+# value rule: None → value must be null; (lo, hi) → value must be int in [lo, hi]
 
 COMMAND_SCHEMA: Dict[str, Any] = {
     "light": {
@@ -32,7 +46,29 @@ COMMAND_SCHEMA: Dict[str, Any] = {
     },
 }
 
-OPTION_DISPLAY_MAP = {
+# ── Hardware execution table ───────────────────────────────────────────────────
+# Maps (device, action) → log string sent to device driver.
+# Use {value} placeholder where a numeric parameter is needed.
+
+_EXEC_TABLE: Dict[Tuple[str, str], str] = {
+    ("light",   "turn_on"):          "LIGHT -> ON",
+    ("light",   "turn_off"):         "LIGHT -> OFF",
+    ("light",   "set_brightness"):   "LIGHT -> BRIGHTNESS {value}%",
+    ("light",   "rgb_cycle"):        "LIGHT -> RGB CYCLE",
+    ("curtain", "open"):             "CURTAIN -> OPEN",
+    ("curtain", "close"):            "CURTAIN -> CLOSE",
+    ("curtain", "set_position"):     "CURTAIN -> POSITION {value}%",
+    ("window",  "open"):             "WINDOW -> OPEN",
+    ("window",  "close"):            "WINDOW -> CLOSE",
+    ("window",  "set_position"):     "WINDOW -> POSITION {value}%",
+    ("ac",      "turn_on"):          "AC -> ON",
+    ("ac",      "turn_off"):         "AC -> OFF",
+    ("ac",      "set_temperature"):  "AC -> TEMPERATURE {value}C",
+}
+
+# ── Option display map (for clarification UI) ─────────────────────────────────
+
+OPTION_DISPLAY_MAP: Dict[str, str] = {
     "close_window":         "Close the window",
     "raise_ac_temperature": "Raise the AC temperature",
     "lower_ac_temperature": "Lower the AC temperature",
@@ -48,23 +84,30 @@ OPTION_DISPLAY_MAP = {
 }
 
 
+# ── Validation ────────────────────────────────────────────────────────────────
+
 def validate_command(cmd: Dict[str, Any]) -> Tuple[bool, str]:
-    required = {"device", "action", "value"}
+    """
+    Purely data-driven validation against COMMAND_SCHEMA.
+    Returns (is_valid, reason_string).
+    """
     if not isinstance(cmd, dict):
         return False, "command_not_dict"
-    if set(cmd.keys()) != required:
+    if set(cmd.keys()) - {"device", "action", "value", "reply"}:
         return False, "invalid_keys"
+    if not {"device", "action", "value"} <= set(cmd.keys()):
+        return False, "missing_required_keys"
 
-    device, action, value = cmd["device"], cmd["action"], cmd["value"]
+    device = cmd["device"]
+    action = cmd["action"]
+    value  = cmd["value"]
 
-    if device == "unknown" and action == "invalid":
-        return False, "unrecognized_command"
     if device not in COMMAND_SCHEMA:
-        return False, "invalid_device"
+        return False, f"unknown_device:{device}"
 
     valid_actions = COMMAND_SCHEMA[device]["actions"]
     if action not in valid_actions:
-        return False, "invalid_action_for_device"
+        return False, f"unknown_action:{action}_for_{device}"
 
     rule = valid_actions[action]
     if rule is None:
@@ -74,53 +117,24 @@ def validate_command(cmd: Dict[str, Any]) -> Tuple[bool, str]:
         return False, "value_must_be_int"
     lo, hi = rule
     if not (lo <= value <= hi):
-        return False, "value_out_of_range"
+        return False, f"value_{value}_out_of_range_{lo}_{hi}"
+
     return True, "ok"
 
 
+# ── Execution ─────────────────────────────────────────────────────────────────
+
 def execute_command(cmd: Dict[str, Any]) -> str:
-    device, action, value = cmd["device"], cmd["action"], cmd["value"]
-    if device == "light":
-        if action == "turn_on":        return "LIGHT -> ON"
-        if action == "turn_off":       return "LIGHT -> OFF"
-        if action == "set_brightness": return f"LIGHT -> BRIGHTNESS {value}%"
-        if action == "rgb_cycle":      return "LIGHT -> RGB CYCLE"
-    if device == "curtain":
-        if action == "open":           return "CURTAIN -> OPEN"
-        if action == "close":          return "CURTAIN -> CLOSE"
-        if action == "set_position":   return f"CURTAIN -> POSITION {value}%"
-    if device == "window":
-        if action == "open":           return "WINDOW -> OPEN"
-        if action == "close":          return "WINDOW -> CLOSE"
-        if action == "set_position":   return f"WINDOW -> POSITION {value}%"
-    if device == "ac":
-        if action == "turn_on":        return "AC -> ON"
-        if action == "turn_off":       return "AC -> OFF"
-        if action == "set_temperature": return f"AC -> TEMPERATURE {value}C"
-    return "NO ACTION EXECUTED"
+    """
+    Dict-lookup execution — no if-else chains.
+    Returns a log string representing the hardware action taken.
+    """
+    key = (cmd["device"], cmd["action"])
+    template = _EXEC_TABLE.get(key, "NO ACTION EXECUTED")
+    return template.format(value=cmd.get("value") or "")
 
 
-def build_execution_reply(cmd: Dict[str, Any]) -> str:
-    device, action, value = cmd["device"], cmd["action"], cmd["value"]
-    if device == "light":
-        if action == "turn_on":        return "Okay, I turned on the light."
-        if action == "turn_off":       return "Okay, I turned off the light."
-        if action == "set_brightness": return f"Okay, I set the light brightness to {value} percent."
-        if action == "rgb_cycle":      return "Okay, I started the RGB cycle mode."
-    if device == "curtain":
-        if action == "open":           return "Okay, I opened the curtain."
-        if action == "close":          return "Okay, I closed the curtain."
-        if action == "set_position":   return f"Okay, I set the curtain to {value} percent."
-    if device == "window":
-        if action == "open":           return "Okay, I opened the window."
-        if action == "close":          return "Okay, I closed the window."
-        if action == "set_position":   return f"Okay, I set the window to {value} percent."
-    if device == "ac":
-        if action == "turn_on":        return "Okay, I turned on the air conditioner."
-        if action == "turn_off":       return "Okay, I turned off the air conditioner."
-        if action == "set_temperature": return f"Okay, I set the air conditioner to {value} degrees."
-    return "Okay, the command was executed."
-
+# ── Clarification helpers ─────────────────────────────────────────────────────
 
 def option_to_display(option: str) -> str:
     return OPTION_DISPLAY_MAP.get(option, option.replace("_", " ").capitalize())
