@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PI_HOST="${1:?Usage: ./deploy.sh pi@<IP> <BT_MAC>}"
+PI_HOST="${1:?Usage: ./deploy.sh tl3461@<IP> <BT_MAC>}"
 BT_MAC="${2:?Usage: ./deploy.sh pi@<IP> <BT_MAC>}"
 
 echo "==> Syncing files to ${PI_HOST}:~/nova/"

@@ -5,8 +5,8 @@ Wants=bt-speaker.service
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/nova
+User=tl3461
+WorkingDirectory=/home/tl3461/nova
 ExecStart=/usr/bin/python3 nova.py
 Restart=on-failure
 RestartSec=5
