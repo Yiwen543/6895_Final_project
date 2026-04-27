@@ -304,6 +304,7 @@ class LLMParser:
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
                 eos_token_id=self.tokenizer.eos_token_id,
+                repetition_penalty=1.1,
                 use_cache=True,
                 stopping_criteria=stop,
             )
