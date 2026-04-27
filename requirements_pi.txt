@@ -1,0 +1,11 @@
+faster-whisper
+transformers
+accelerate
+sentencepiece
+torch --index-url https://download.pytorch.org/whl/cpu
+sounddevice
+soundfile
+lgpio
+rpi-lgpio
+piper-tts
+numpy
