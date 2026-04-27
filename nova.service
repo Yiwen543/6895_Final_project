@@ -1,0 +1,17 @@
+[Unit]
+Description=Nova Smart Home Assistant
+After=sound.target bt-speaker.service
+Wants=bt-speaker.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/nova
+ExecStart=/usr/bin/python3 nova.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
