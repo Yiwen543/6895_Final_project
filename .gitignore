@@ -1,0 +1,9 @@
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+__pycache__/
+*.pyc
+*.pyo
+nova_memory/
+nova_lora_adapter/
+nova_lora_merged/
+nova_int8/

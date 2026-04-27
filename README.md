@@ -71,12 +71,12 @@ source nova_env/bin/activate          # Windows: nova_env\Scripts\activate
 ```bash
 pip install numpy pandas sounddevice soundfile faster-whisper \
             transformers accelerate sentencepiece pyttsx3 \
-            chromadb sentence-transformers torch
+            chromadb sentence-transformers torch bitsandbytes
 ```
 
 ### 4. Set your Hugging Face token
 
-The LLM (`Qwen2.5-1.5B-Instruct`) is a gated model. Log in once:
+The default LLM (`Qwen2.5-3B-Instruct`) is a gated model. Log in once:
 
 ```bash
 export HF_TOKEN=hf_your_token_here      # Mac/Linux
@@ -186,31 +186,24 @@ rsync -av --exclude 'nova_env' --exclude '__pycache__' \
 ```bash
 pip install numpy sounddevice soundfile faster-whisper \
             transformers accelerate sentencepiece pyttsx3 \
-            chromadb sentence-transformers torch
+            chromadb sentence-transformers torch bitsandbytes
 ```
 
-### Optional: quantize the model for faster inference
+### Quantization on Pi 5 (automatic)
 
-Quantizing from `float32` to `int8` roughly halves memory usage and speeds up inference on CPU:
+When running on CPU (i.e., on the Pi), `LLM_LOAD_IN_4BIT=True` is set automatically in `config.py`.
+The model loads with **NF4 4-bit quantization** via `bitsandbytes`, keeping memory under **3 GB** for any model below 4B parameters.
 
-```python
-# Run this once on a machine with enough RAM, then copy the quantized model to the Pi
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+**Supported models** — change `LLM_MODEL_NAME` in `config.py` to switch:
 
-quant_cfg = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForCausalLM.from_pretrained(
-    "nova_lora_merged",           # or "Qwen/Qwen2.5-1.5B-Instruct"
-    quantization_config=quant_cfg,
-    device_map="auto",
-)
-model.save_pretrained("nova_int8")
-```
-
-Then in `config.py`, set:
-
-```python
-LLM_MODEL_NAME = "nova_int8"
-```
+| Model ID | Params | int4 RAM | Notes |
+|---|---|---|---|
+| `Qwen/Qwen2.5-3B-Instruct` | 3B | ~2 GB | **Default** — drop-in upgrade, best accuracy |
+| `Qwen/Qwen2.5-1.5B-Instruct` | 1.5B | ~0.9 GB | Original lightweight option |
+| `google/gemma-2-2b-it` | 2B | ~1.2 GB | Fastest inference on Pi 5 |
+| `meta-llama/Llama-3.2-3B-Instruct` | 3B | ~1.8 GB | Strong structured JSON output |
+| `microsoft/Phi-3.5-mini-instruct` | 3.8B | ~2.4 GB | Highest quality, needs HF token |
+| `HuggingFaceTB/SmolLM2-1.7B-Instruct` | 1.7B | ~1 GB | Ultra-light fallback |
 
 ### Run on the Pi
 

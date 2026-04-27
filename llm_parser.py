@@ -1,8 +1,12 @@
 """
-LLM module: loads Qwen2.5-1.5B-Instruct and exposes three inference methods:
+LLM module: loads a configurable instruction-tuned model (default: Qwen2.5-3B-Instruct)
+and exposes three inference methods:
   - parse_unified()    classify user text → direct_command / needs_clarification / general_qa / invalid
   - resolve_followup() resolve user reply to a clarification question → direct_command / invalid
   - answer_qa()        generate a plain-text answer using RAG context
+
+Model is selected via LLM_MODEL_NAME in config.py. On CPU/Pi 5, 4-bit NF4 quantization
+is applied automatically (LLM_LOAD_IN_4BIT=True) to keep memory under 3 GB.
 """
 
 import re
@@ -14,11 +18,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
     StoppingCriteria,
     StoppingCriteriaList,
 )
 
-from config import LLM_MODEL_NAME, LLM_DEVICE, LLM_DTYPE, LLM_MAX_NEW_TOKENS
+from config import LLM_MODEL_NAME, LLM_DEVICE, LLM_DTYPE, LLM_LOAD_IN_4BIT, LLM_MAX_NEW_TOKENS
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -159,11 +164,27 @@ class _JsonStop(StoppingCriteria):
 class LLMParser:
     """Loads the LLM once; exposes parse_unified / resolve_followup / answer_qa."""
 
-    def __init__(self, model_name: str = LLM_MODEL_NAME, dtype=LLM_DTYPE):
-        print(f"Loading LLM ({model_name}) on {LLM_DEVICE} ({dtype}) ...")
+    def __init__(self, model_name: str = LLM_MODEL_NAME, dtype=LLM_DTYPE,
+                 load_in_4bit: bool = LLM_LOAD_IN_4BIT):
+        quant_tag = "int4" if load_in_4bit else str(dtype)
+        print(f"Loading LLM ({model_name}) on {LLM_DEVICE} [{quant_tag}] ...")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        # MPS doesn't support device_map="auto"; use explicit device instead
-        if LLM_DEVICE == "mps":
+
+        if load_in_4bit:
+            # 4-bit NF4 quantization — fits any <4B model in <3 GB on Pi 5
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.float32,
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=bnb_config,
+                device_map="auto",
+            )
+        elif LLM_DEVICE == "mps":
+            # MPS doesn't support device_map="auto"
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name, torch_dtype=dtype
             ).to("mps")
@@ -171,6 +192,7 @@ class LLMParser:
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name, torch_dtype=dtype, device_map="auto"
             )
+
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.model.eval()
