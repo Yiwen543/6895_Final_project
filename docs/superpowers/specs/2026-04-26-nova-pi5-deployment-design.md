@@ -12,7 +12,7 @@
 |-----------|------|
 | Board | Raspberry Pi 5 (8GB RAM) |
 | OS | Raspberry Pi OS 64-bit (Bookworm) |
-| Microphone | USB microphone (auto-detected by ALSA) |
+| Microphone | SunFounder USB 2.0 Mini Microphone |
 | Speaker | Bluetooth speaker (PipeWire sink) |
 | Light | Grove Chainable RGB LED (P9813) |
 | Curtain | 28BYJ-48 stepper motor + ULN2003 driver board |
@@ -47,18 +47,18 @@ Pi 5 uses the RP1 southbridge chip. **`RPi.GPIO` is not supported.** Use `lgpio`
 
 ### Pin Assignments (BCM numbering, verified against Pi 5 40-pin header)
 
-| Device | Signal | Physical Pin | GPIO |
-|--------|--------|-------------|------|
+| Device | Signal | Pi Physical Pin | GPIO |
+|--------|--------|----------------|------|
 | Grove RGB LED | DATA | Pin 11 | GPIO 17 |
 | Grove RGB LED | CLK | Pin 13 | GPIO 27 |
-| Grove RGB LED | VCC | Pin 2 | 5V |
-| Grove RGB LED | GND | Pin 9 | GND |
 | ULN2003 | IN1 | Pin 29 | GPIO 5 |
 | ULN2003 | IN2 | Pin 31 | GPIO 6 |
 | ULN2003 | IN3 | Pin 33 | GPIO 13 |
 | ULN2003 | IN4 | Pin 35 | GPIO 19 |
-| ULN2003 | VCC | Pin 2 | 5V |
-| ULN2003 | GND | Pin 6 | GND |
+
+**供电说明：** 所有设备（RGB LED、ULN2003 驱动板、步进马达）的 VCC 和 GND 均接外部独立电源，不走 Pi GPIO header 的 5V/GND 引脚。
+
+**⚠️ 共地要求：** 外部电源的 GND 必须与 Pi 的任意 GND 引脚（如 Pin 6 或 Pin 9）短接，确保信号电平参考一致，否则 GPIO 输出无法可靠驱动设备。
 
 ### Action Mapping
 
@@ -79,8 +79,18 @@ Pi 5 uses the RP1 southbridge chip. **`RPi.GPIO` is not supported.** Use `lgpio`
 
 ## 4. Audio
 
-### USB Microphone
-Auto-detected as ALSA input device. `sounddevice` uses the system default input; no configuration needed.
+### USB Microphone (SunFounder USB 2.0 Mini Microphone)
+标准 USB Audio Class 设备，Raspberry Pi OS 免驱即插即用。采样率支持 16000 Hz，与 Nova pipeline 一致。
+
+Pi 上存在多个音频输入设备时（板载 + USB 麦克风），`sounddevice` 不一定自动选中 USB 麦克风。`deploy.sh` 执行时加入以下步骤，将其设为系统默认输入：
+
+```bash
+# 找到 SunFounder USB 麦克风对应的 PipeWire source
+USB_SOURCE=$(pactl list sources short | grep -i usb | awk '{print $2}' | head -1)
+pactl set-default-source "$USB_SOURCE"
+```
+
+`nova.py` 中 `sounddevice` 使用系统默认输入，无需硬编码设备索引，重新插拔后仍有效。
 
 ### Bluetooth Speaker (one-time manual pairing)
 ```bash
@@ -189,6 +199,7 @@ Steps executed:
    - `apt-get install -y espeak-ng libportaudio2 python3-pip`
    - `pip3 install -r requirements_pi.txt`
    - Download Piper voice model to `~/nova/voices/` if not present
+   - Set SunFounder USB mic as default PipeWire input (`pactl set-default-source`)
    - Write `bt-speaker.service` with the provided MAC address
    - Write `nova.service`
    - `systemctl daemon-reload && systemctl enable bt-speaker nova`
