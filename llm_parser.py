@@ -175,7 +175,7 @@ class LLMParser:
             print(f"Loading LLM via llama.cpp ({LLM_GGUF_PATH}) ...")
             self._llama = Llama(
                 model_path=LLM_GGUF_PATH,
-                n_ctx=512,
+                n_ctx=2048,
                 n_threads=4,
                 verbose=False,
             )
