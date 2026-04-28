@@ -5,3 +5,6 @@ __pycache__/
 *.egg-info/
 .DS_Store
 **/.DS_Store
+
+# GGUF model files (too large for git)
+models/
