@@ -30,22 +30,63 @@ from config import (
 
 
 class _InMemoryEpisodic:
-    """Fallback episodic store when chromadb is not available."""
+    """Fallback episodic store when chromadb is not available.
 
-    def __init__(self):
+    Persists to NDJSON (one entry per line) at `persist_path` so episodes
+    survive process restarts. Each line:
+      {"id": "...", "embedding": [..floats..], "document": "...", "metadata": {...}}
+    """
+
+    def __init__(self, persist_path: Optional[Path] = None):
         self._entries: List[Dict] = []
+        self._persist_path = Path(persist_path) if persist_path else None
+        if self._persist_path and self._persist_path.exists():
+            self._load()
+
+    def _load(self):
+        with open(self._persist_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    # Tolerate a partially-written final line from a prior crash
+                    continue
+                self._entries.append({
+                    "id": rec["id"],
+                    "embedding": np.array(rec["embedding"], dtype=np.float32),
+                    "document": rec["document"],
+                    "metadata": rec["metadata"],
+                })
+
+    def _append(self, entry: Dict):
+        if self._persist_path is None:
+            return
+        self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+        rec = {
+            "id": entry["id"],
+            "embedding": entry["embedding"].tolist(),
+            "document": entry["document"],
+            "metadata": entry["metadata"],
+        }
+        with open(self._persist_path, "a") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     def count(self) -> int:
         return len(self._entries)
 
     def add(self, ids, embeddings, documents, metadatas):
         for eid, emb, doc, meta in zip(ids, embeddings, documents, metadatas):
-            self._entries.append({
+            entry = {
                 "id": eid,
                 "embedding": np.array(emb, dtype=np.float32),
                 "document": doc,
                 "metadata": meta,
-            })
+            }
+            self._entries.append(entry)
+            self._append(entry)
 
     def query(self, query_embeddings, n_results, include=None):
         if not self._entries:
@@ -87,7 +128,9 @@ class MemoryManager:
                 name="episodes", metadata={"hnsw:space": "cosine"}
             )
         else:
-            self.episodes = _InMemoryEpisodic()
+            self.episodes = _InMemoryEpisodic(
+                persist_path=Path(f"{persist_dir}/episodic.ndjson")
+            )
 
         # Semantic memory — JSON
         self._prefs_path = Path(f"{persist_dir}/user_prefs.json")
