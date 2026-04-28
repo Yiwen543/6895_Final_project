@@ -2,7 +2,7 @@
 MemoryManager: four-layer memory architecture for Nova.
 
   working    — RAM deque, current session only, destroyed on clear_working()
-  episodic   — ChromaDB vector store, persistent, retrieved via cosine similarity
+  episodic   — ChromaDB vector store (if available), else in-memory list
   semantic   — JSON file, structured user preferences (e.g. preferred AC temp)
   procedural — JSON file, successful trigger→action patterns learned over time
 """
@@ -10,11 +10,16 @@ MemoryManager: four-layer memory architecture for Nova.
 import json
 import uuid
 import numpy as np
-import chromadb
 from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+try:
+    import chromadb
+    _HAS_CHROMADB = True
+except ImportError:
+    _HAS_CHROMADB = False
 
 from config import (
     MEMORY_DIR,
@@ -22,6 +27,43 @@ from config import (
     SKILL_SIM_THRESHOLD,
     EPISODE_DIST_CUTOFF,
 )
+
+
+class _InMemoryEpisodic:
+    """Fallback episodic store when chromadb is not available."""
+
+    def __init__(self):
+        self._entries: List[Dict] = []
+
+    def count(self) -> int:
+        return len(self._entries)
+
+    def add(self, ids, embeddings, documents, metadatas):
+        for eid, emb, doc, meta in zip(ids, embeddings, documents, metadatas):
+            self._entries.append({
+                "id": eid,
+                "embedding": np.array(emb, dtype=np.float32),
+                "document": doc,
+                "metadata": meta,
+            })
+
+    def query(self, query_embeddings, n_results, include=None):
+        if not self._entries:
+            return {"documents": [[]], "metadatas": [[]], "distances": [[]]}
+        q = np.array(query_embeddings[0], dtype=np.float32)
+        q_norm = np.linalg.norm(q) + 1e-9
+        scored = []
+        for e in self._entries:
+            v = e["embedding"]
+            cos_dist = 1.0 - float(np.dot(q, v) / (q_norm * (np.linalg.norm(v) + 1e-9)))
+            scored.append((cos_dist, e))
+        scored.sort(key=lambda x: x[0])
+        top = scored[:n_results]
+        return {
+            "documents": [[t[1]["document"] for t in top]],
+            "metadatas": [[t[1]["metadata"] for t in top]],
+            "distances": [[t[0] for t in top]],
+        }
 
 
 class MemoryManager:
@@ -38,11 +80,14 @@ class MemoryManager:
         # Working memory — session RAM only
         self.working: deque = deque(maxlen=working_maxlen)
 
-        # Episodic memory — ChromaDB
-        self._chroma = chromadb.PersistentClient(path=f"{persist_dir}/chroma")
-        self.episodes = self._chroma.get_or_create_collection(
-            name="episodes", metadata={"hnsw:space": "cosine"}
-        )
+        # Episodic memory — ChromaDB or in-memory fallback
+        if _HAS_CHROMADB:
+            self._chroma = chromadb.PersistentClient(path=f"{persist_dir}/chroma")
+            self.episodes = self._chroma.get_or_create_collection(
+                name="episodes", metadata={"hnsw:space": "cosine"}
+            )
+        else:
+            self.episodes = _InMemoryEpisodic()
 
         # Semantic memory — JSON
         self._prefs_path = Path(f"{persist_dir}/user_prefs.json")
