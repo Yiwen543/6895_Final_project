@@ -10,10 +10,21 @@ rsync -avz --exclude '__pycache__' --exclude '.git' --exclude 'tests/' \
 
 echo "==> Installing system dependencies"
 ssh "$PI_HOST" "sudo apt-get install -y --no-install-recommends \
-    python3-pip libportaudio2 libasound2-dev bluetooth bluez"
+    python3-pip libportaudio2 libasound2-dev bluetooth bluez libopenblas-dev"
 
 echo "==> Installing Python dependencies"
 ssh "$PI_HOST" "pip3 install --break-system-packages -r ~/nova/requirements_pi.txt"
+
+echo "==> Installing llama-cpp-python with OpenBLAS"
+ssh "$PI_HOST" "CMAKE_ARGS='-DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS' \
+    pip3 install llama-cpp-python --break-system-packages --no-cache-dir"
+
+echo "==> Downloading GGUF model (if needed, ~2GB)"
+ssh "$PI_HOST" "mkdir -p ~/nova/models && \
+    [ -f ~/nova/models/qwen2.5-3b-instruct-q4_k_m.gguf ] || \
+    wget -q --show-progress \
+      -O ~/nova/models/qwen2.5-3b-instruct-q4_k_m.gguf \
+      'https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf'"
 
 echo "==> Downloading Piper voice model (if needed)"
 ssh "$PI_HOST" "mkdir -p ~/nova/voices && \

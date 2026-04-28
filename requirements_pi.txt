@@ -10,3 +10,4 @@ rpi-lgpio
 piper-tts
 numpy
 sentence-transformers
+llama-cpp-python
