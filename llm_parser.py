@@ -1,8 +1,13 @@
 """
-LLM module: loads Qwen2.5-1.5B-Instruct and exposes three inference methods:
+LLM module: loads a configurable instruction-tuned model (default: Qwen2.5-3B-Instruct)
+and exposes three inference methods:
   - parse_unified()    classify user text → direct_command / needs_clarification / general_qa / invalid
   - resolve_followup() resolve user reply to a clarification question → direct_command / invalid
   - answer_qa()        generate a plain-text answer using RAG context
+
+On Mac (MPS/CUDA): uses HuggingFace transformers with float16.
+On Pi 5 (CPU): uses llama-cpp-python with a GGUF Q4_K_M quantized model.
+Backend is selected via LLM_BACKEND in config.py.
 """
 
 import re
@@ -11,14 +16,17 @@ import time
 import torch
 from typing import Any, Dict, List, Optional, Tuple
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    StoppingCriteria,
-    StoppingCriteriaList,
-)
+from config import LLM_BACKEND, LLM_MODEL_NAME, LLM_GGUF_PATH, LLM_DEVICE, LLM_DTYPE, LLM_MAX_NEW_TOKENS
 
-from config import LLM_MODEL_NAME, LLM_DEVICE, LLM_DTYPE, LLM_MAX_NEW_TOKENS
+if LLM_BACKEND == "transformers":
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        StoppingCriteria,
+        StoppingCriteriaList,
+    )
+else:
+    from llama_cpp import Llama
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -141,17 +149,18 @@ Reply in plain text only — no JSON, no markdown.
 """.strip()
 
 
-# ── Stopping criterion ────────────────────────────────────────────────────────
+# ── Stopping criterion (transformers backend only) ───────────────────────────
 
-class _JsonStop(StoppingCriteria):
-    def __init__(self, tokenizer, prompt_length: int):
-        self._tokenizer = tokenizer
-        self._prompt_len = prompt_length
+if LLM_BACKEND == "transformers":
+    class _JsonStop(StoppingCriteria):
+        def __init__(self, tokenizer, prompt_length: int):
+            self._tokenizer = tokenizer
+            self._prompt_len = prompt_length
 
-    def __call__(self, input_ids, scores, **kwargs) -> bool:
-        gen = input_ids[0][self._prompt_len:]
-        text = self._tokenizer.decode(gen, skip_special_tokens=True)
-        return LLMParser._has_complete_json(text)
+        def __call__(self, input_ids, scores, **kwargs) -> bool:
+            gen = input_ids[0][self._prompt_len:]
+            text = self._tokenizer.decode(gen, skip_special_tokens=True)
+            return LLMParser._has_complete_json(text)
 
 
 # ── Main class ────────────────────────────────────────────────────────────────
@@ -160,20 +169,33 @@ class LLMParser:
     """Loads the LLM once; exposes parse_unified / resolve_followup / answer_qa."""
 
     def __init__(self, model_name: str = LLM_MODEL_NAME, dtype=LLM_DTYPE):
-        print(f"Loading LLM ({model_name}) on {LLM_DEVICE} ({dtype}) ...")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        # MPS doesn't support device_map="auto"; use explicit device instead
-        if LLM_DEVICE == "mps":
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_name, torch_dtype=dtype
-            ).to("mps")
-        else:
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_name, torch_dtype=dtype, device_map="auto"
+        self._backend = LLM_BACKEND
+
+        if self._backend == "llama_cpp":
+            print(f"Loading LLM via llama.cpp ({LLM_GGUF_PATH}) ...")
+            self._llama = Llama(
+                model_path=LLM_GGUF_PATH,
+                n_ctx=512,
+                n_threads=4,
+                verbose=False,
             )
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.model.eval()
+            self.tokenizer = None
+            self.model = None
+        else:
+            print(f"Loading LLM ({model_name}) on {LLM_DEVICE} [{dtype}] ...")
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            if LLM_DEVICE == "mps":
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_name, torch_dtype=dtype
+                ).to("mps")
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_name, torch_dtype=dtype, device_map="auto"
+                )
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.model.eval()
+            self._llama = None
         print("LLM ready.")
 
     # ── Static JSON helpers ───────────────────────────────────────────────────
@@ -267,27 +289,40 @@ class LLMParser:
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ]
-        prompt = self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-        plen = inputs["input_ids"].shape[1]
 
-        stop = StoppingCriteriaList([_JsonStop(self.tokenizer, plen)])
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            out = self.model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-                use_cache=True,
-                stopping_criteria=stop,
+        if self._backend == "llama_cpp":
+            t0 = time.perf_counter()
+            resp = self._llama.create_chat_completion(
+                messages=messages,
+                max_tokens=max_new_tokens,
+                temperature=0,
+                repeat_penalty=1.1,
             )
-        latency_ms = (time.perf_counter() - t0) * 1000
+            latency_ms = (time.perf_counter() - t0) * 1000
+            raw = resp["choices"][0]["message"]["content"].strip()
+        else:
+            prompt = self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+            plen = inputs["input_ids"].shape[1]
 
-        raw = self.tokenizer.decode(out[0][plen:], skip_special_tokens=True).strip()
+            stop = StoppingCriteriaList([_JsonStop(self.tokenizer, plen)])
+            t0 = time.perf_counter()
+            with torch.no_grad():
+                out = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    repetition_penalty=1.1,
+                    use_cache=True,
+                    stopping_criteria=stop,
+                )
+            latency_ms = (time.perf_counter() - t0) * 1000
+            raw = self.tokenizer.decode(out[0][plen:], skip_special_tokens=True).strip()
+
         if verbose:
             print("Raw output:", raw)
             print(f"Latency: {latency_ms:.1f} ms")
@@ -341,24 +376,36 @@ class LLMParser:
             {"role": "system", "content": QA_SYSTEM_PROMPT},
             {"role": "user",   "content": user_content},
         ]
-        prompt = self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-        plen = inputs["input_ids"].shape[1]
 
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            out = self.model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-                use_cache=True,
+        if self._backend == "llama_cpp":
+            t0 = time.perf_counter()
+            resp = self._llama.create_chat_completion(
+                messages=messages,
+                max_tokens=max_new_tokens,
+                temperature=0,
             )
-        latency_ms = (time.perf_counter() - t0) * 1000
-        answer = self.tokenizer.decode(out[0][plen:], skip_special_tokens=True).strip()
+            latency_ms = (time.perf_counter() - t0) * 1000
+            answer = resp["choices"][0]["message"]["content"].strip()
+        else:
+            prompt = self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+            plen = inputs["input_ids"].shape[1]
+
+            t0 = time.perf_counter()
+            with torch.no_grad():
+                out = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    use_cache=True,
+                )
+            latency_ms = (time.perf_counter() - t0) * 1000
+            answer = self.tokenizer.decode(out[0][plen:], skip_special_tokens=True).strip()
+
         if verbose:
             print("[QA answer]", answer)
         return answer, latency_ms
