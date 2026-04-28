@@ -19,7 +19,7 @@ def main() -> None:
     tts    = TTSEngine()
     llm    = LLMParser()
     embed  = SentenceTransformer(EMBED_MODEL_NAME)
-    memory = MemoryManager(embed)
+    memory = MemoryManager(embed_fn=lambda text: embed.encode(text, convert_to_numpy=True).tolist())
     gpio   = GPIOExecutor()
 
     nova = NovaAgent(llm=llm, memory=memory, speak=tts.speak, gpio=gpio)
