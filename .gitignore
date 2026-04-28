@@ -8,3 +8,6 @@ __pycache__/
 
 # GGUF model files (too large for git)
 models/
+
+# Claude Code local state (worktrees, cache)
+.claude/
