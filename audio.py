@@ -15,6 +15,16 @@ from collections import deque
 from faster_whisper import WhisperModel
 from typing import Optional
 
+
+def _find_input_device():
+    """Return the index of the pulse/PipeWire device if present, else None."""
+    for i, dev in enumerate(sd.query_devices()):
+        if dev['max_input_channels'] > 0 and 'pulse' in dev['name'].lower():
+            return i
+    return None
+
+_INPUT_DEVICE = _find_input_device()
+
 from config import (
     AUDIO_DTYPE,
     CHANNELS,
@@ -113,6 +123,7 @@ class AudioListener:
             samplerate=SAMPLE_RATE,
             channels=CHANNELS,
             dtype=AUDIO_DTYPE,
+            device=_INPUT_DEVICE,
         )
         sd.wait()
 
@@ -186,6 +197,7 @@ class AudioListener:
                 channels=CHANNELS,
                 dtype=AUDIO_DTYPE,
                 blocksize=FRAME_SAMPLES,
+                device=_INPUT_DEVICE,
             ) as stream:
                 while True:
                     print("[Listener] Waiting for speech ...")
