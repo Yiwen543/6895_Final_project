@@ -1,8 +1,8 @@
 import torch
 
 # ── LLM ──────────────────────────────────────────────────────────────────────
-LLM_MODEL_NAME     = "Qwen/Qwen2.5-3B-Instruct"
-LLM_GGUF_PATH      = "models/qwen2.5-3b-instruct-q4_k_m.gguf"
+LLM_MODEL_NAME     = "Qwen/Qwen2.5-1.5B-Instruct"
+LLM_GGUF_PATH      = "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
 
 if torch.cuda.is_available():
     LLM_BACKEND       = "transformers"
@@ -17,7 +17,7 @@ else:
     LLM_DEVICE        = "cpu"
     LLM_DTYPE         = torch.float32
 
-LLM_MAX_NEW_TOKENS = 80
+LLM_MAX_NEW_TOKENS = 60
 
 # ── STT (Whisper) ─────────────────────────────────────────────────────────────
 WHISPER_MODEL_SIZE   = "tiny.en"

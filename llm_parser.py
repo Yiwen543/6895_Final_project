@@ -240,6 +240,7 @@ class LLMParser:
                 max_tokens=max_new_tokens,
                 temperature=0,
                 repeat_penalty=1.1,
+                response_format={"type": "json_object"},
             )
             latency_ms = (time.perf_counter() - t0) * 1000
             raw = resp["choices"][0]["message"]["content"].strip()
