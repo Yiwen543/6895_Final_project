@@ -68,7 +68,10 @@ class STTModel:
         buf = io.BytesIO()
         sf.write(buf, audio, SAMPLE_RATE, format="wav")
         buf.seek(0)
-        segs, _ = self._model.transcribe(buf, beam_size=1, initial_prompt="Nova,")
+        segs, _ = self._model.transcribe(
+            buf, beam_size=1, language="en",
+            initial_prompt="Nova,", condition_on_previous_text=False,
+        )
         return " ".join(s.text.strip() for s in segs).strip()
 
     def transcribe_file(self, path: str) -> str:
