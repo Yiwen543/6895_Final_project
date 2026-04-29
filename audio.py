@@ -60,11 +60,11 @@ class STTModel:
         buf = io.BytesIO()
         sf.write(buf, audio, SAMPLE_RATE, format="wav")
         buf.seek(0)
-        segs, _ = self._model.transcribe(buf, beam_size=1)
+        segs, _ = self._model.transcribe(buf, beam_size=1, initial_prompt="Nova,")
         return " ".join(s.text.strip() for s in segs).strip()
 
     def transcribe_file(self, path: str) -> str:
-        segs, _ = self._model.transcribe(path, beam_size=1)
+        segs, _ = self._model.transcribe(path, beam_size=1, initial_prompt="Nova,")
         return " ".join(s.text.strip() for s in segs).strip()
 
 
@@ -96,7 +96,7 @@ class TTSEngine:
                 frames = wf.readframes(wf.getnframes())
                 rate = wf.getframerate()
             audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-            sd.play(audio, rate)
+            sd.play(audio, rate, channels=1)
             sd.wait()
         except Exception as e:
             print("[TTS ERROR]", e)

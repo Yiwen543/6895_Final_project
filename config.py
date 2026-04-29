@@ -35,6 +35,7 @@ PIPER_MODEL_PATH = "voices/en_US-lessac-medium.onnx"
 ASSISTANT_NAME = "nova"
 ASSISTANT_NAME_VARIANTS = [
     "nova", "nava", "no va", "noba", "noa", "nove", "novia",
+    "noda", "nota", "nora", "know-a",
 ]
 
 # ── Audio capture ─────────────────────────────────────────────────────────────
