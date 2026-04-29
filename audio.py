@@ -23,7 +23,15 @@ def _find_input_device():
             return i
     return None
 
-_INPUT_DEVICE = _find_input_device()
+def _find_output_device():
+    """Return the index of the pulse/PipeWire output device if present, else None."""
+    for i, dev in enumerate(sd.query_devices()):
+        if dev['max_output_channels'] > 0 and 'pulse' in dev['name'].lower():
+            return i
+    return None
+
+_INPUT_DEVICE  = _find_input_device()
+_OUTPUT_DEVICE = _find_output_device()
 
 from config import (
     AUDIO_DTYPE,
@@ -96,7 +104,9 @@ class TTSEngine:
                 frames = wf.readframes(wf.getnframes())
                 rate = wf.getframerate()
             audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-            sd.play(audio, rate, channels=1)
+            # duplicate to stereo for BT speaker compatibility
+            stereo = np.stack([audio, audio], axis=1)
+            sd.play(stereo, rate, device=_OUTPUT_DEVICE)
             sd.wait()
         except Exception as e:
             print("[TTS ERROR]", e)

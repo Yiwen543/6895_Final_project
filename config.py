@@ -17,7 +17,7 @@ else:
     LLM_DEVICE        = "cpu"
     LLM_DTYPE         = torch.float32
 
-LLM_MAX_NEW_TOKENS = 160
+LLM_MAX_NEW_TOKENS = 80
 
 # ── STT (Whisper) ─────────────────────────────────────────────────────────────
 WHISPER_MODEL_SIZE   = "tiny.en"
@@ -42,7 +42,7 @@ ASSISTANT_NAME_VARIANTS = [
 SAMPLE_RATE           = 16000
 CHANNELS              = 1
 AUDIO_DTYPE           = "float32"
-ENERGY_THRESHOLD      = 0.01
+ENERGY_THRESHOLD      = 0.15
 
 FRAME_DURATION        = 0.1
 FRAME_SAMPLES         = int(SAMPLE_RATE * FRAME_DURATION)
@@ -58,7 +58,7 @@ MAX_FRAMES     = int(MAX_UTTERANCE_SECONDS / FRAME_DURATION)
 # ── Memory ────────────────────────────────────────────────────────────────────
 MEMORY_DIR          = "nova_memory"
 WORKING_MAXLEN      = 8
-SKILL_SIM_THRESHOLD = 0.82   # procedural memory cosine similarity cutoff
+SKILL_SIM_THRESHOLD = 0.92   # procedural memory cosine similarity cutoff
 EPISODE_DIST_CUTOFF = 0.6    # episodic RAG: keep episodes with distance < this
 
 # ── LoRA fine-tuning ──────────────────────────────────────────────────────────
