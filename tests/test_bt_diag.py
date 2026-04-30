@@ -104,3 +104,24 @@ def test_cmd_quantum_runs(monkeypatch):
     from bt_diag import cmd_quantum
     cmd_quantum()
     assert calls.count("play") == 2
+
+def test_cmd_rssi_runs(monkeypatch):
+    import unittest.mock as mock
+    call_count = [0]
+
+    def fake_play(signal, rate=22050):
+        return 0
+
+    def fake_run(cmd, **kwargs):
+        r = mock.MagicMock()
+        r.stdout = "RSSI return value: -55\n"
+        r.returncode = 0
+        call_count[0] += 1
+        return r
+
+    monkeypatch.setattr("bt_diag.play_and_count_xruns", fake_play)
+    monkeypatch.setattr("bt_diag.subprocess.run", fake_run)
+    monkeypatch.setattr("bt_diag.time.sleep", lambda x: None)
+
+    from bt_diag import cmd_rssi
+    cmd_rssi()  # must not raise

@@ -142,3 +142,51 @@ def cmd_quantum():
         result(True, "xrun count unchanged with larger quantum — quantum is NOT the cause")
     else:
         result(False, f"xruns dropped {xrun_default}→{xrun_large} with quantum=2048 — quantum IS the root cause")
+
+
+def cmd_rssi():
+    print("\n=== TEST: Bluetooth Signal Strength ===")
+    sig = make_signal()
+    samples = []
+    failures = 0
+
+    def poll_rssi():
+        nonlocal failures
+        for _ in range(10):
+            out = subprocess.run(
+                ["hcitool", "rssi", BT_MAC],
+                capture_output=True, text=True, env=ENV
+            )
+            line = out.stdout.strip()
+            try:
+                val = int(line.split()[-1])
+                samples.append(val)
+                raw("rssi_sample", val)
+            except (ValueError, IndexError):
+                failures += 1
+                raw("rssi_sample", f"FAIL ({line!r})")
+            time.sleep(0.5)
+
+    poller = threading.Thread(target=poll_rssi, daemon=True)
+    poller.start()
+    play_and_count_xruns(sig)
+    poller.join()
+
+    if samples:
+        avg = sum(samples) / len(samples)
+        raw("rssi_min", min(samples))
+        raw("rssi_max", max(samples))
+        raw("rssi_avg", f"{avg:.1f}")
+        raw("poll_failures", failures)
+        passed = avg > -70 and failures < 3
+        if passed:
+            result(True, f"avg RSSI {avg:.1f} dBm > -70 — signal is NOT the cause")
+        else:
+            reason = []
+            if avg <= -70:
+                reason.append(f"avg RSSI {avg:.1f} dBm ≤ -70")
+            if failures >= 3:
+                reason.append(f"{failures} poll failures")
+            result(False, "; ".join(reason) + " — weak signal / interference IS likely a cause")
+    else:
+        result(False, f"all {failures} RSSI polls failed — cannot measure signal")
