@@ -222,7 +222,7 @@ def run_one_case(llm, case: Dict[str, Any]) -> Dict[str, Any]:
     ]
 
     latencies = []
-    last_parsed = {"type": "invalid", "device": None, "action": None}
+    all_parsed = []
 
     for _ in range(REPETITIONS):
         t0 = time.perf_counter()
@@ -235,17 +235,23 @@ def run_one_case(llm, case: Dict[str, Any]) -> Dict[str, Any]:
         )
         latencies.append((time.perf_counter() - t0) * 1000)
         raw = resp["choices"][0]["message"]["content"].strip()
-        last_parsed = parse_output(raw)
+        all_parsed.append(parse_output(raw))
+
+    # majority vote on type; use the first result with the winning type for device/action
+    from collections import Counter
+    type_counts = Counter(p["type"] for p in all_parsed)
+    winning_type = type_counts.most_common(1)[0][0]
+    winner = next(p for p in all_parsed if p["type"] == winning_type)
 
     median_ms = statistics.median(latencies)
     return {
         "input":            case["input"],
         "expected_type":    case["type"],
-        "predicted_type":   last_parsed["type"],
+        "predicted_type":   winner["type"],
         "expected_device":  case["device"],
-        "predicted_device": last_parsed["device"],
+        "predicted_device": winner["device"],
         "expected_action":  case["action"],
-        "predicted_action": last_parsed["action"],
+        "predicted_action": winner["action"],
         "latency_ms":       median_ms,
     }
 
