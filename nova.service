@@ -10,6 +10,10 @@ WorkingDirectory=/home/tl3461/nova
 Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=PYTHONUNBUFFERED=1
+Environment=TRANSFORMERS_OFFLINE=1
+Environment=HF_DATASETS_OFFLINE=1
+Environment=TOKENIZERS_PARALLELISM=false
+Environment=TQDM_DISABLE=1
 ExecStart=/usr/bin/python3 nova.py
 Restart=on-failure
 RestartSec=5

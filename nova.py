@@ -2,6 +2,8 @@
 """Nova Smart Home Assistant — Raspberry Pi 5 entry point."""
 
 import sys
+import logging
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 from sentence_transformers import SentenceTransformer
 
 from audio import AudioListener, STTModel, TTSEngine

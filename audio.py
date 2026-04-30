@@ -83,31 +83,22 @@ class TTSEngine:
     """Piper-based TTS. Interface unchanged: speak(text, verbose=True)."""
 
     def __init__(self, model_path: str = None):
-        import wave
-        import io as _io
         from piper.voice import PiperVoice
         from config import PIPER_MODEL_PATH
         _path = model_path or PIPER_MODEL_PATH
         print(f"Loading Piper TTS ({_path}) ...")
         self._voice = PiperVoice.load(_path)
-        self._wave = wave
-        self._io = _io
         print("TTS ready.")
 
     def speak(self, text: str, verbose: bool = True) -> None:
         if verbose:
             print("[TTS]", text)
         try:
-            import numpy as np
-            wav_buf = self._io.BytesIO()
-            with self._wave.open(wav_buf, 'wb') as wf:
-                self._voice.synthesize(text, wf)
-            wav_buf.seek(0)
-            with self._wave.open(wav_buf, 'rb') as wf:
-                frames = wf.readframes(wf.getnframes())
-                rate = wf.getframerate()
-            audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-            # duplicate to stereo for BT speaker compatibility
+            chunks = list(self._voice.synthesize(text))
+            if not chunks:
+                return
+            audio = np.concatenate([c.audio_float_array for c in chunks])
+            rate = chunks[0].sample_rate
             stereo = np.stack([audio, audio], axis=1)
             sd.play(stereo, rate, device=_OUTPUT_DEVICE)
             sd.wait()

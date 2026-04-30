@@ -28,10 +28,14 @@ ssh "$PI_HOST" "mkdir -p ~/nova/models && \
 
 echo "==> Downloading Piper voice model (if needed)"
 ssh "$PI_HOST" "mkdir -p ~/nova/voices && \
-    [ -f ~/nova/voices/en_US-lessac-medium.onnx ] || \
-    wget -q --show-progress \
-      -O ~/nova/voices/en_US-lessac-medium.onnx \
-      'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx'"
+    { [ -f ~/nova/voices/en_US-lessac-medium.onnx ] || \
+      wget -q --show-progress \
+        -O ~/nova/voices/en_US-lessac-medium.onnx \
+        'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx'; } && \
+    { [ -f ~/nova/voices/en_US-lessac-medium.onnx.json ] || \
+      wget -q --show-progress \
+        -O ~/nova/voices/en_US-lessac-medium.onnx.json \
+        'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json'; }"
 
 echo "==> Setting SunFounder USB microphone as default PipeWire input"
 ssh "$PI_HOST" "
