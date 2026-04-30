@@ -240,31 +240,30 @@ def cmd_cpu():
 def cmd_codec():
     print("\n=== TEST: A2DP Codec ===")
 
-    # 1. pactl list sinks — look for BT sink and its active codec
-    out = subprocess.run(
-        ["pactl", "list", "sinks"],
-        capture_output=True, text=True, env=ENV
-    )
-    in_bt_sink = False
-    codec_line = None
+    codec_hits = []
+
+    # 1. pw-dump — PipeWire native, always available
+    out = subprocess.run(["pw-dump"], capture_output=True, text=True, env=ENV)
     for line in out.stdout.splitlines():
         ls = line.strip()
-        if "bluez" in ls.lower() or BT_MAC.lower() in ls.lower():
-            in_bt_sink = True
-        if in_bt_sink and "codec" in ls.lower():
-            codec_line = ls
-            raw("pactl_codec", ls)
-            break
-    if not in_bt_sink:
-        raw("pactl_bt_sink", "NOT FOUND — speaker may not be connected")
+        if ("bluez" in ls.lower() or "a2dp" in ls.lower()) and "codec" in ls.lower():
+            raw("pw_dump_codec", ls)
+            codec_hits.append(ls.lower())
 
-    # 2. pw-dump — look for bluez codec property
-    out2 = subprocess.run(["pw-dump"], capture_output=True, text=True, env=ENV)
+    # 2. wpctl status — lists active BT sink with codec info
+    out2 = subprocess.run(["wpctl", "status"], capture_output=True, text=True, env=ENV)
+    in_audio = False
     for line in out2.stdout.splitlines():
-        if ("bluez" in line.lower() or "a2dp" in line.lower()) and "codec" in line.lower():
-            raw("pw_dump_codec", line.strip())
+        ls = line.strip()
+        if "Audio" in line:
+            in_audio = True
+        if in_audio and ("bluez" in ls.lower() or BT_MAC.lower().replace(":", "_") in ls.lower()):
+            raw("wpctl_bt_sink", ls)
+        if in_audio and "codec" in ls.lower():
+            raw("wpctl_codec", ls)
+            codec_hits.append(ls.lower())
 
-    # 3. bluetoothctl info
+    # 3. bluetoothctl info — shows negotiated profile
     out3 = subprocess.run(
         ["bluetoothctl", "info", BT_MAC],
         capture_output=True, text=True, env=ENV
@@ -273,20 +272,21 @@ def cmd_codec():
         ls = line.strip()
         if ls:
             raw("btctl", ls)
+            if any(k in ls.lower() for k in ["codec", "profile", "a2dp", "sbc", "aac", "aptx"]):
+                codec_hits.append(ls.lower())
 
     # Verdict
-    codec_str = (codec_line or "").lower()
-    if any(c in codec_str for c in ["aac", "aptx", "ldac"]):
-        result(True, f"High-quality codec active — codec is NOT the likely cause")
-    elif "sbc" in codec_str:
+    combined = " ".join(codec_hits)
+    if any(c in combined for c in ["aac", "aptx", "ldac"]):
+        result(True, "High-quality codec active — codec is NOT the likely cause")
+    elif "sbc" in combined:
         result(False,
-               "SBC codec in use — SBC has low, fixed bitrate and can cause choppy audio; "
-               "fix: install pulseaudio-module-bluetooth-aptx or configure BlueZ AAC profile, "
-               "then pair again")
+               "SBC codec in use — SBC has low fixed bitrate and causes choppy audio; "
+               "fix: sudo apt install libldac bluez-plugins, then re-pair the speaker")
     else:
         result(False,
-               "Could not determine codec from pactl/pw-dump; check output above manually — "
-               "if speaker shows SBC in bluetoothctl, that is likely the cause")
+               "Could not confirm codec from pw-dump/wpctl/bluetoothctl; "
+               "check the btctl lines above for 'Codec' or 'UUID' entries")
 
 
 def cmd_inference():
