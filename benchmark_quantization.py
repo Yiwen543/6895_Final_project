@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # ── Inference settings (match production) ────────────────────────────────────
 
-N_CTX     = 768
+N_CTX     = 768   # covers SYSTEM_PROMPT (~430 tok) + longest test input + reply headroom
 N_THREADS = 4
 MAX_TOKENS = 60
 STOP_SEQS  = ["\n", "Input:"]
@@ -77,7 +77,7 @@ MODEL_VARIANTS: List[Dict[str, Any]] = [
     {
         "name":     "1.5B-Q4_K_M",
         "path":     "models/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        "url":      None,
+        "url":      None,   # pre-downloaded on Pi; --download skips this
         "size_gb":  1.1,
     },
     {
@@ -95,7 +95,7 @@ MODEL_VARIANTS: List[Dict[str, Any]] = [
     {
         "name":     "3B-Q4_K_M",
         "path":     "models/qwen2.5-3b-instruct-q4_k_m.gguf",
-        "url":      None,
+        "url":      None,   # pre-downloaded on Pi; --download skips this
         "size_gb":  2.0,
     },
 ]

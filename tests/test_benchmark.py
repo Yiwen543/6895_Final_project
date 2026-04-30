@@ -58,6 +58,14 @@ def test_evaluate_cmd_acc_wrong_device():
     assert metrics["cmd_acc"] == 0.0
 
 
+def test_evaluate_cmd_acc_wrong_action():
+    results = _make_results([
+        {"predicted_action": "turn_off"},   # wrong action
+    ])
+    metrics = evaluate(results)
+    assert metrics["cmd_acc"] == 0.0
+
+
 def test_evaluate_latency():
     results = _make_results([
         {"latency_ms": 1000.0},
