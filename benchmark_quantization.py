@@ -128,3 +128,49 @@ TEST_CASES: List[Dict[str, Any]] = [
     {"input": "Okay.",        "type": "invalid", "device": None, "action": None},
     {"input": "Nova.",        "type": "invalid", "device": None, "action": None},
 ]
+
+# ── Evaluation helpers ────────────────────────────────────────────────────────
+
+def evaluate(raw_results: List[Dict[str, Any]]) -> Dict[str, float]:
+    """Compute metrics from a list of per-case result dicts.
+
+    Each dict must have: expected_type, predicted_type, expected_device,
+    predicted_device, expected_action, predicted_action, latency_ms.
+    """
+    type_correct = 0
+    cmd_total = 0
+    cmd_correct = 0
+    latencies = []
+
+    for r in raw_results:
+        if r["predicted_type"] == r["expected_type"]:
+            type_correct += 1
+        if r["expected_type"] == "direct_command":
+            cmd_total += 1
+            if (r["predicted_device"] == r["expected_device"] and
+                    r["predicted_action"] == r["expected_action"]):
+                cmd_correct += 1
+        latencies.append(r["latency_ms"])
+
+    n = len(raw_results)
+    latencies_sorted = sorted(latencies)
+    p95_idx = max(0, int(len(latencies_sorted) * 0.95) - 1)
+
+    return {
+        "type_acc": type_correct / n if n else 0.0,
+        "cmd_acc":  cmd_correct / cmd_total if cmd_total else 0.0,
+        "avg_ms":   statistics.mean(latencies) if latencies else 0.0,
+        "p95_ms":   latencies_sorted[p95_idx] if latencies_sorted else 0.0,
+    }
+
+
+def format_row(name: str, metrics: Dict[str, float], size_gb: float) -> str:
+    """Return a Markdown table row string."""
+    return (
+        f"| {name:<12} "
+        f"| {metrics['type_acc']*100:>6.0f}% "
+        f"| {metrics['cmd_acc']*100:>6.0f}% "
+        f"| {metrics['avg_ms']:>8.0f} "
+        f"| {metrics['p95_ms']:>8.0f} "
+        f"| {size_gb:>8.1f} |"
+    )
