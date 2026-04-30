@@ -125,3 +125,18 @@ def test_cmd_rssi_runs(monkeypatch):
 
     from bt_diag import cmd_rssi
     cmd_rssi()  # must not raise
+
+def test_cmd_cpu_runs(monkeypatch):
+    calls = []
+
+    def fake_play(signal, rate=22050):
+        calls.append("play")
+        return 0
+
+    monkeypatch.setattr("bt_diag.play_and_count_xruns", fake_play)
+    monkeypatch.setattr("bt_diag.time.sleep", lambda x: None)
+    monkeypatch.setattr("bt_diag._read_load", lambda: "0.5")
+
+    from bt_diag import cmd_cpu
+    cmd_cpu()
+    assert calls.count("play") == 2

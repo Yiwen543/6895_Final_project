@@ -144,6 +144,11 @@ def cmd_quantum():
         result(False, f"xruns dropped {xrun_default}→{xrun_large} with quantum=2048 — quantum IS the root cause")
 
 
+def _read_load() -> str:
+    with open("/proc/loadavg") as f:
+        return f.read().split()[0]
+
+
 def cmd_rssi():
     print("\n=== TEST: Bluetooth Signal Strength ===")
     sig = make_signal()
@@ -190,3 +195,41 @@ def cmd_rssi():
             result(False, "; ".join(reason) + " — weak signal / interference IS likely a cause")
     else:
         result(False, f"all {failures} RSSI polls failed — cannot measure signal")
+
+
+def cmd_cpu():
+    print("\n=== TEST: CPU Competition ===")
+    sig = make_signal()
+
+    load_before = _read_load()
+    raw("load_avg_before", load_before)
+    print("[INFO] Playing at idle...")
+    xrun_idle = play_and_count_xruns(sig)
+    raw("xrun_idle", xrun_idle)
+
+    stop_event = threading.Event()
+
+    def busy():
+        while not stop_event.is_set():
+            pass
+
+    threads = [threading.Thread(target=busy, daemon=True) for _ in range(3)]
+    for t in threads:
+        t.start()
+    time.sleep(0.5)
+
+    load_during = _read_load()
+    raw("load_avg_during", load_during)
+    print("[INFO] Playing under CPU load (3 busy threads)...")
+    xrun_loaded = play_and_count_xruns(sig)
+    raw("xrun_loaded", xrun_loaded)
+
+    stop_event.set()
+    for t in threads:
+        t.join(timeout=1)
+
+    passed = xrun_loaded <= xrun_idle + 2
+    if passed:
+        result(True, f"xruns {xrun_idle}→{xrun_loaded} under load — CPU is NOT the cause")
+    else:
+        result(False, f"xruns jumped {xrun_idle}→{xrun_loaded} under load — CPU starvation IS the root cause")
