@@ -17,7 +17,7 @@ else:
     LLM_DEVICE        = "cpu"
     LLM_DTYPE         = torch.float32
 
-LLM_MAX_NEW_TOKENS = 60
+LLM_MAX_NEW_TOKENS = 120
 
 # ── STT (Whisper) ─────────────────────────────────────────────────────────────
 WHISPER_MODEL_SIZE   = "tiny.en"
@@ -35,7 +35,7 @@ PIPER_MODEL_PATH = "voices/en_US-lessac-medium.onnx"
 ASSISTANT_NAME = "nova"
 ASSISTANT_NAME_VARIANTS = [
     "nova", "nava", "no va", "noba", "noa", "nove", "novia",
-    "noda", "nota", "nora", "know-a",
+    "noda", "nota", "nora", "know-a", "nana",
 ]
 
 # ── Audio capture ─────────────────────────────────────────────────────────────
