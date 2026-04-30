@@ -174,3 +174,77 @@ def format_row(name: str, metrics: Dict[str, float], size_gb: float) -> str:
         f"| {metrics['p95_ms']:>8.0f} "
         f"| {size_gb:>8.1f} |"
     )
+
+
+# ── Inference ─────────────────────────────────────────────────────────────────
+
+def _extract_first_json(text: str) -> Optional[str]:
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def parse_output(raw: str) -> Dict[str, Any]:
+    """Extract type/device/action from raw LLM output string."""
+    json_str = _extract_first_json(raw)
+    if not json_str:
+        return {"type": "invalid", "device": None, "action": None}
+    try:
+        obj = json.loads(json_str)
+    except json.JSONDecodeError:
+        return {"type": "invalid", "device": None, "action": None}
+    t = str(obj.get("type", "invalid")).strip().lower()
+    if t not in ("direct_command", "needs_clarification", "general_qa", "invalid"):
+        t = "invalid"
+    device = str(obj.get("device", "")).strip().lower() or None
+    action = str(obj.get("action", "")).strip().lower() or None
+    if t != "direct_command":
+        device = None
+        action = None
+    return {"type": t, "device": device, "action": action}
+
+
+def run_one_case(llm, case: Dict[str, Any]) -> Dict[str, Any]:
+    """Run a single test case REPETITIONS times; return result with median latency."""
+    user_prompt = f'Text: "{case["input"]}"\nReturn JSON only.'
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",   "content": user_prompt},
+    ]
+
+    latencies = []
+    last_parsed = {"type": "invalid", "device": None, "action": None}
+
+    for _ in range(REPETITIONS):
+        t0 = time.perf_counter()
+        resp = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+            repeat_penalty=REPEAT_PENALTY,
+            stop=STOP_SEQS,
+        )
+        latencies.append((time.perf_counter() - t0) * 1000)
+        raw = resp["choices"][0]["message"]["content"].strip()
+        last_parsed = parse_output(raw)
+
+    median_ms = statistics.median(latencies)
+    return {
+        "input":            case["input"],
+        "expected_type":    case["type"],
+        "predicted_type":   last_parsed["type"],
+        "expected_device":  case["device"],
+        "predicted_device": last_parsed["device"],
+        "expected_action":  case["action"],
+        "predicted_action": last_parsed["action"],
+        "latency_ms":       median_ms,
+    }
