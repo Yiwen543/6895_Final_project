@@ -67,3 +67,35 @@ def raw(label: str, value):
 def result(passed: bool, reason: str):
     tag = "PASS" if passed else "FAIL"
     print(f"[RESULT] {tag} — {reason}")
+
+
+def cmd_wifi():
+    print("\n=== TEST: WiFi/BT Coexistence ===")
+    sig = make_signal()
+
+    out = subprocess.run(
+        ["nmcli", "dev", "status"], capture_output=True, text=True, env=ENV
+    )
+    wifi_on = "wlan0" in out.stdout and "connected" in out.stdout
+    raw("wifi_active", wifi_on)
+
+    print("[INFO] Playing with WiFi ON...")
+    xrun_on = play_and_count_xruns(sig)
+    raw("xrun_wifi_on", xrun_on)
+
+    subprocess.run(["sudo", "nmcli", "dev", "disconnect", "wlan0"],
+                   capture_output=True, env=ENV)
+    time.sleep(1)
+
+    print("[INFO] Playing with WiFi OFF...")
+    xrun_off = play_and_count_xruns(sig)
+    raw("xrun_wifi_off", xrun_off)
+
+    subprocess.run(["sudo", "nmcli", "dev", "connect", "wlan0"],
+                   capture_output=True, env=ENV)
+
+    passed = abs(xrun_on - xrun_off) <= 2
+    if passed:
+        result(True, "xrun count unchanged with WiFi on/off — WiFi is NOT the cause")
+    else:
+        result(False, f"xruns dropped {xrun_on}→{xrun_off} when WiFi disconnected — WiFi IS the root cause")

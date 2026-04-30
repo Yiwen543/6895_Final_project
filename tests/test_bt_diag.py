@@ -59,3 +59,27 @@ def test_callback_stops_on_buffer_exhausted():
 
     assert isinstance(result, int)
     assert "CallbackStop" in callbacks_stopped
+
+def test_cmd_wifi_runs(monkeypatch):
+    """cmd_wifi should run without error when mocked."""
+    import unittest.mock as mock
+
+    calls = []
+
+    def fake_play(signal, rate=22050):
+        calls.append("play")
+        return 0  # 0 xruns
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd[0])
+        r = mock.MagicMock()
+        r.stdout = "wlan0  wifi  connected\n"
+        r.returncode = 0
+        return r
+
+    monkeypatch.setattr("bt_diag.play_and_count_xruns", fake_play)
+    monkeypatch.setattr("bt_diag.subprocess.run", fake_run)
+
+    from bt_diag import cmd_wifi
+    cmd_wifi()  # must not raise
+    assert calls.count("play") == 2
