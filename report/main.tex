@@ -1,0 +1,452 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{listings}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=blue,
+    urlcolor=blue,
+}
+
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    columns=fullflexible,
+    showstringspaces=false,
+    frame=single,
+    framerule=0.3pt,
+}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Nova: An Offline Voice-Controlled Smart Home Assistant on Raspberry Pi 5 with a Four-Layer Memory and a Hybrid Rule-Based / Quantized LLM Pipeline}
+
+\author{
+\IEEEauthorblockN{Team Member A}
+\IEEEauthorblockA{Columbia University \\
+EECS 6895 \\
+\textit{uni1@columbia.edu}}
+\and
+\IEEEauthorblockN{Team Member B}
+\IEEEauthorblockA{Columbia University \\
+EECS 6895 \\
+\textit{uni2@columbia.edu}}
+\and
+\IEEEauthorblockN{Team Member C}
+\IEEEauthorblockA{Columbia University \\
+EECS 6895 \\
+\textit{uni3@columbia.edu}}
+}
+
+\maketitle
+
+\begin{abstract}
+We present Nova, a fully offline voice-controlled smart home assistant that runs on a Raspberry Pi 5. Most commercial assistants such as Alexa or Google Home rely on the cloud, which raises privacy concerns and depends on a stable internet connection. Nova does everything on-device: speech-to-text, intent parsing, dialogue management, and hardware control. The pipeline uses Whisper for STT, a 3B Qwen2.5 model in GGUF Q3\_K\_M format through \texttt{llama-cpp-python} for intent parsing, and Piper for TTS. We also add a rule-based fast path that handles unambiguous commands in under 5\,ms, so the LLM is only used for ambiguous or open-ended speech. To support natural conversation, we add a four-layer memory system (working, episodic, semantic, procedural) that lets the assistant remember user preferences and learn repeating patterns. We fine-tune the LLM with LoRA on a custom dataset of 225 labelled (utterance, JSON) pairs covering four intent types. On a 20-case benchmark across five quantization variants, the chosen 3B Q3\_K\_M model reaches 85\% intent accuracy with an average latency of 3.9\,s, while the rule-based path keeps direct commands near-instant. The full system, including GPIO drivers for an LED ring and a stepper motor (curtain), runs offline on a single Raspberry Pi 5.
+\end{abstract}
+
+\begin{IEEEkeywords}
+smart home, voice assistant, edge computing, large language model, LoRA fine-tuning, Raspberry Pi, quantization, offline AI
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+A modern smart home usually depends on cloud-based voice assistants. The user speaks to a microphone, the audio is sent to a remote server, the server returns text or actions, and the device executes them. This works well most of the time, but it has two real problems. First, every spoken command goes to a third-party server, which is a privacy risk many users do not feel comfortable with. Second, when the network is slow or down, the assistant becomes useless. We were also interested in whether a small device like a Raspberry Pi 5 is now powerful enough to do all of this work on its own, given recent progress in quantized large language models.
+
+Our project, called Nova, is an attempt to answer that question. Nova is an offline smart home assistant that listens for the wake word ``Nova'', understands what the user said, and either controls a real device (an LED ring and a stepper-motor curtain in our prototype) or replies in natural speech. Everything happens on a single Raspberry Pi 5 with 8\,GB of RAM. Nothing is sent to the cloud.
+
+The task is harder than it sounds. A voice assistant has to deal with three kinds of user input: clear commands (``turn on the light''), vague feelings (``I feel a bit cold''), and general questions (``how do I store leftovers?''). Each one needs a different reaction. A clear command should be executed right away. A vague feeling should trigger a short clarification dialogue. A general question should be answered in plain language. On top of that, the assistant should remember preferences so that the same vague request next time can be resolved automatically.
+
+To make this run on a Pi, we cannot use a 70B-parameter model. We had to make several design choices to fit the device:
+\begin{itemize}
+    \item Use a 3B-parameter Qwen2.5-Instruct model in 3-bit GGUF quantization, served by \texttt{llama-cpp-python}.
+    \item Add a rule-based fast path that catches the most common direct commands without ever calling the LLM, which saves about 4 seconds per command.
+    \item Add a four-layer memory (working, episodic, semantic, procedural) so that the system can build context over time without relying on a long prompt.
+    \item Fine-tune the model with LoRA on 225 hand-labelled examples so it learns the four intent types we care about.
+\end{itemize}
+
+The contributions of this work are: (1) a complete offline pipeline that brings together STT, a quantized LLM, RAG-style memory, TTS, and real GPIO hardware on a single board; (2) a benchmark study comparing five different quantization levels of Qwen2.5-Instruct on the same task; and (3) a small but effective fine-tuning dataset that targets the corner cases (colloquial complaints, food-safety questions) that small models tend to misclassify.
+
+The rest of this paper is organized as follows. Section~\ref{sec:related} discusses related work. Section~\ref{sec:data} describes the data we collected. Section~\ref{sec:methods} explains our methods. Section~\ref{sec:system} gives the system overview. Section~\ref{sec:experiments} reports the experiments. Section~\ref{sec:conclusion} concludes.
+
+\section{Related Work}
+\label{sec:related}
+
+\textbf{Cloud-based voice assistants.} Amazon Alexa, Google Assistant, and Apple Siri are the well-known commercial systems. They are powerful and have very low word error rate, but they all depend on remote servers. Recent reports such as~\cite{ring2023} have shown that recordings from such systems may be reviewed or stored in ways the user did not expect. This motivates an offline alternative for users who care about privacy.
+
+\textbf{On-device speech recognition.} OpenAI Whisper~\cite{radford2023whisper} is a transformer-based speech-to-text model with multilingual support. The \texttt{faster-whisper} project provides a CTranslate2-based version that is up to 4$\times$ faster on CPU. We use the \texttt{tiny.en} variant in int8 quantization on the Pi. It is good enough for short English utterances and runs in well under a second.
+
+\textbf{Small open-source LLMs.} TinyLlama-1.1B~\cite{zhang2024tinyllama}, Phi-2~\cite{microsoft2023phi2} and Qwen2.5-Instruct~\cite{qwen2025} are recent small chat models. We tried TinyLlama-1.1B and Phi-2 in early stages but found Qwen2.5 produced more reliable JSON output for our intent task. Qwen2.5 is also released in many quantization levels (Q3/Q4/Q5\_K\_M GGUF), which matters a lot for edge deployment.
+
+\textbf{Quantization for edge LLMs.} GGUF~\cite{ggml2024} is a binary format used by \texttt{llama.cpp} that supports several integer quantization schemes. Q3\_K\_M, Q4\_K\_M, Q5\_K\_M trade off model size and accuracy. Most prior work on quantization is tested on standard benchmarks like MMLU. Our project adds an applied benchmark on a real edge task, which is intent classification for smart home control on ARM CPU.
+
+\textbf{Parameter-efficient fine-tuning.} LoRA~\cite{hu2022lora} freezes the base model and only trains low-rank adapter matrices. It makes fine-tuning small enough to run on a single CPU or modest GPU. Most LoRA papers focus on natural language understanding benchmarks; few apply LoRA to small chat models for embedded device control. We also use the merged LoRA approach, where the trained adapter is merged into the base weights and then exported to GGUF.
+
+\textbf{Memory in dialogue agents.} Long-term memory in conversational agents has been studied through retrieval-augmented generation (RAG)~\cite{lewis2020rag} and through layered memory architectures. The four-layer split we use (working, episodic, semantic, procedural) is inspired by classic cognitive science work on human memory~\cite{tulving1972episodic} but adapted for a small LLM. Most prior dialogue agents only keep a working/short-term context; we add explicit semantic and procedural memory so that the system can re-use a learned answer instead of asking the same clarification again.
+
+\textbf{Difference from prior work.} Compared with the above, our project is novel in three ways. First, we put all components together on a single \$80 board and demonstrate a working physical demo (LED ring + stepper-motor curtain). Second, our memory layer learns from the user's past clarifications and skips the LLM entirely once a pattern is known. Third, we provide a controlled study of five quantization variants under exactly the same conditions on real Pi hardware.
+
+\section{Data}
+\label{sec:data}
+
+The system uses two kinds of data: a fine-tuning dataset that we built ourselves, and a benchmark test suite for evaluation.
+
+\subsection{Fine-Tuning Dataset}
+
+There is no public dataset that exactly matches our task (English, four-class intent JSON for a small smart home with light, curtain, window, and AC). So we built our own. We wrote 225 (utterance, JSON output) pairs by hand. They are stored in \texttt{finetune/train\_data.py} as a Python list. Each pair has the form:
+
+\begin{lstlisting}[language=Python]
+("Nova, turn on the light.",
+ '{"type":"direct_command","device":"light",
+   "action":"turn_on","value":null,
+   "reply":"Sure, turning on the light!"}')
+\end{lstlisting}
+
+The dataset is split across the four intent classes:
+\begin{itemize}
+    \item \texttt{direct\_command}: 76 examples covering the four devices and all canonical actions (on/off, brightness, RGB cycle, open/close, set\_position, set\_temperature). We added paraphrases and value variants (``set AC to 22'', ``cooling to 21'', ``make it 22 degrees'').
+    \item \texttt{needs\_clarification}: 65 examples of vague feelings (cold, hot, dark, bright, stuffy) and colloquial complaints (``this room sucks'', ``fix the lighting'').
+    \item \texttt{general\_qa}: 60 examples of household questions (``how do I store bread?'', ``how long does milk last?'') including some hard cases that mention the fridge or kitchen but should not be treated as device control.
+    \item \texttt{invalid}: 24 examples without the wake word, off-topic chat, or empty intents.
+\end{itemize}
+
+\textbf{Why this data is hard to gather.} Ambiguous and colloquial utterances are the failure mode of small LLMs. ``I feel cold'' should not be turned into a direct command, because the user did not name a device or action. Public datasets such as SLURP~\cite{bastianelli2020slurp} or FluentSpeechCommands cover device control but do not cover the ``feeling'' or ``general QA'' classes the way our system needs. For this reason, we wrote the examples ourselves. Each example was reviewed by two team members.
+
+\textbf{The 3 V's.}
+\begin{itemize}
+    \item \emph{Volume}: 225 labelled pairs, plus around 40 hard test cases used during evaluation. The size is small but enough for LoRA fine-tuning of a 3B model.
+    \item \emph{Variety}: four intent classes, four devices, multiple action types, paraphrases, colloquial language.
+    \item \emph{Velocity}: not a streaming dataset, but the runtime episodic memory does grow over time as the system is used. Each interaction adds one episode (text + embedding + metadata) to ChromaDB.
+\end{itemize}
+
+\textbf{Preprocessing.} The training script formats every example using the model's native chat template with three roles: \texttt{system} (the unified prompt), \texttt{user} (the utterance), and \texttt{assistant} (the JSON output). The tokenizer's \texttt{apply\_chat\_template} is used so that the format matches inference exactly. SFTTrainer in HuggingFace TRL applies response-only loss masking automatically.
+
+\subsection{Benchmark Test Suite}
+
+For evaluation we built a separate 20-case test suite (\texttt{benchmark\_quantization.py}). It has 5 cases per intent class and is fixed so all models are evaluated on the same inputs. For \texttt{direct\_command} cases we also check whether the model picked the correct device and action, not only the correct type.
+
+\section{Methods}
+\label{sec:methods}
+
+This section describes the main design decisions and the algorithms behind each step of the pipeline.
+
+\subsection{Hybrid Rule-Based / LLM Architecture}
+
+A naive design would send every transcribed utterance to the LLM. On a Raspberry Pi 5 a 3B model takes around 4 seconds per call, which is unacceptable for the most common commands like ``turn on the light''. So we added a rule-based fast path. The function \texttt{try\_rule\_based} in \texttt{rule\_based.py} uses a small set of regular expressions to match unambiguous direct commands. If a match is found, the command is returned in $<5$\,ms. Otherwise the LLM is called.
+
+This design is based on a simple observation: in real home control, the long tail of natural language is small. People most often say ``turn on the light'', ``set AC to 24'', ``open the curtain''. These can be covered by 8--10 regex patterns. Only feelings, vague complaints, and questions need the LLM.
+
+\subsection{Unified JSON Output Format}
+
+All four intent types share one output schema. The LLM is asked to produce exactly one JSON object that matches one of:
+
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize]
+{"type":"direct_command","device":...,
+ "action":...,"value":...,"reply":...}
+{"type":"needs_clarification","question":...,
+ "options":[...],"reply":...}
+{"type":"general_qa","answer":"..."}
+{"type":"invalid"}
+\end{lstlisting}
+
+A unified format is important for two reasons. First, it lets the agent code use a single dispatch table on the \texttt{type} field. Second, when fine-tuning, the loss is computed on a single JSON output instead of mixing classification and free-text generation. This makes training more stable on a small dataset.
+
+We also made the prompt include a strict ``never infer a device from a feeling'' rule. Small models tend to map ``I feel cold'' to ``set AC to 26''. Adding both an explicit rule and several few-shot examples in the system prompt fixes most of this problem.
+
+\subsection{Custom Stopping Criterion}
+
+For the HuggingFace transformers backend, we wrote a custom \texttt{StoppingCriteria} class (\texttt{\_JsonStop}) that stops generation as soon as a complete JSON object is produced. This matters because by default the model would keep generating tokens up to \texttt{max\_new\_tokens=120}, which adds wasted latency. The stopping check counts braces and exits when the depth returns to zero. For the \texttt{llama-cpp-python} backend we use \texttt{response\_format=\{``type'':``json\_object''\}}, which is the equivalent grammar-based constraint built into llama.cpp.
+
+\subsection{Four-Layer Memory}
+\label{ssec:memory}
+
+The memory system is split into four layers, each with a different lifetime and storage:
+
+\begin{enumerate}
+    \item \textbf{Working memory.} An in-RAM \texttt{deque} of the last 8 turns. Cleared at the end of each session.
+    \item \textbf{Episodic memory.} Past interactions stored as embeddings in a ChromaDB vector store. Each episode has the user text, the result type, the assistant reply, and a timestamp. We use \texttt{all-MiniLM-L6-v2} sentence embeddings, which are small enough to run on the Pi. Cosine distance is used for retrieval.
+    \item \textbf{Semantic memory.} A JSON file of structured user preferences, e.g. \texttt{ac\_set\_temperature\_preference: 22}. Updated whenever a value is set.
+    \item \textbf{Procedural memory.} A JSON file of (trigger, action, count) tuples. When a clarification is resolved, the trigger and the chosen action are saved. Next time a similar trigger comes in, we look up the procedural memory by cosine similarity (threshold 0.92). If a match is found, the action is executed automatically without re-asking.
+\end{enumerate}
+
+The agent's \texttt{build\_context} method concatenates the four layers into a short context block that is appended to the QA prompt for general questions. This gives a lightweight RAG behavior without needing a separate retrieval model.
+
+\subsection{LoRA Fine-Tuning}
+
+We use LoRA~\cite{hu2022lora} with rank $r=8$ and $\alpha=16$ on seven target modules of Qwen2.5: \texttt{q\_proj}, \texttt{k\_proj}, \texttt{v\_proj}, \texttt{o\_proj}, \texttt{gate\_proj}, \texttt{up\_proj}, \texttt{down\_proj}. Trainable parameters are about 0.44\% of the base model.
+
+Training settings:
+\begin{itemize}
+    \item Optimizer: AdamW (default in TRL).
+    \item Epochs: 3, batch size 1, gradient accumulation 8.
+    \item Learning rate: $2 \times 10^{-4}$, cosine schedule, warmup ratio 0.1.
+    \item Max sequence length: 512 tokens.
+    \item Loss: causal LM loss, with response masking from \texttt{SFTTrainer} so we only compute loss on the assistant turn.
+\end{itemize}
+
+After training we save the adapter and also merge it into the base weights, so we can later export to GGUF for the Pi.
+
+\subsection{Alternatives We Tried}
+
+Before settling on the current design, we tried two other approaches.
+
+\textbf{TinyLlama-1.1B + Float32 + HuggingFace.} The first version of the system used TinyLlama-1.1B-Chat in float32 on CPU through HuggingFace transformers. Average latency was around 18 seconds per LLM call, and accuracy on hard cases was 33\%. This was too slow.
+
+\textbf{Phi-2 (2.7B).} We compared Phi-2 against TinyLlama and Qwen2.5-1.5B (\texttt{model\_comparison.py}). Phi-2 is more accurate than TinyLlama, but it does not produce strict JSON reliably without heavy prompt engineering, and it has no GGUF in the smaller quantization levels we wanted. We chose Qwen2.5 because it has very stable instruction-following and a full GGUF release.
+
+\subsection{Concurrent Hardware and TTS}
+
+When a direct command is executed, the spoken reply (TTS) and the GPIO action both take time. We start them in two threads so they happen at the same time. This way the user hears ``Sure, turning on the light'' while the LED is already turning on. Implementation is in \texttt{agent.py:\_do\_direct\_command}.
+
+\section{System Overview}
+\label{sec:system}
+
+\subsection{Software Architecture}
+
+The runtime pipeline is shown in Fig.~\ref{fig:arch}. Each module is a single Python file with a clear responsibility:
+
+\begin{itemize}
+    \item \texttt{audio.py}: STT (faster-whisper), TTS (Piper), and a VAD-based audio listener.
+    \item \texttt{rule\_based.py}: regex fast path for direct commands.
+    \item \texttt{llm\_parser.py}: LLM loading and three inference methods (\texttt{parse\_unified}, \texttt{resolve\_followup}, \texttt{answer\_qa}).
+    \item \texttt{memory.py}: \texttt{MemoryManager} with the four memory layers.
+    \item \texttt{agent.py}: \texttt{NovaAgent}, the dialogue state machine.
+    \item \texttt{schema.py}: device schema, validation, and execution log.
+    \item \texttt{gpio\_executor.py}: real hardware control on the Raspberry Pi 5.
+    \item \texttt{config.py}: all tunable parameters.
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.95\linewidth}{
+\centering
+\textbf{Pipeline (top$\rightarrow$bottom):} \\
+Microphone $\rightarrow$ VAD listener (energy threshold) \\
+$\downarrow$ \\
+Whisper STT (tiny.en, int8) \\
+$\downarrow$ \\
+Wake-word filter (``nova'' + variants) \\
+$\downarrow$ \\
+Rule-based fast path (regex) \\
+$\downarrow$ \emph{(only if no rule match)} \\
+LLM (Qwen2.5-3B-Instruct Q3\_K\_M, llama-cpp-python) \\
+$\downarrow$ \\
+NovaAgent dispatcher (4 intent types) \\
+$\downarrow$ \\
+Memory update + Schema validation \\
+$\downarrow$ \\
+GPIO action $\parallel$ Piper TTS (in parallel threads) \\
+$\downarrow$ \\
+LED ring / Stepper motor curtain / Bluetooth speaker
+}}
+\caption{Nova system pipeline. All components run on a single Raspberry Pi 5.}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Tech Stack}
+
+\begin{itemize}
+    \item \textbf{Hardware:} Raspberry Pi 5 (8\,GB), ReSpeaker 2-Mics HAT, Grove Chainable RGB LED, ULN2003 stepper motor, USB microphone, Bluetooth speaker.
+    \item \textbf{OS:} Raspberry Pi OS 64-bit (ARM64).
+    \item \textbf{Python packages:} \texttt{faster-whisper}, \texttt{llama-cpp-python}, \texttt{transformers}, \texttt{peft}, \texttt{trl}, \texttt{datasets}, \texttt{sentence-transformers}, \texttt{chromadb}, \texttt{piper-tts}, \texttt{sounddevice}, \texttt{soundfile}, \texttt{lgpio}, \texttt{numpy}.
+    \item \textbf{LLM backend:} \texttt{llama-cpp-python} with OpenBLAS for ARM, $n\_ctx{=}768$, $n\_threads{=}4$.
+    \item \textbf{STT:} \texttt{faster-whisper tiny.en} in int8 on CPU.
+    \item \textbf{TTS:} Piper (\texttt{en\_US-lessac-medium.onnx}).
+    \item \textbf{Embeddings:} \texttt{all-MiniLM-L6-v2} (384-d) for both episodic memory and procedural memory lookup.
+    \item \textbf{Service management:} \texttt{systemd} with two services (\texttt{bt-speaker.service}, \texttt{nova.service}).
+\end{itemize}
+
+\subsection{Dialogue State Machine}
+
+\texttt{NovaAgent} keeps a small state object with a flag \texttt{pending\_clarification}. The flow is:
+\begin{enumerate}
+    \item If a clarification is pending and the user says ``Nova'' again, abandon the pending state and treat the new utterance as a new request.
+    \item If a clarification is pending and the user replies, call \texttt{resolve\_followup} to map the reply into one of the offered options.
+    \item Otherwise, run wake-word filter $\rightarrow$ rule-based path $\rightarrow$ LLM $\rightarrow$ dispatcher.
+\end{enumerate}
+The dispatcher branches on \texttt{semantic[``type'']} and calls one of the four handlers (\texttt{\_do\_direct\_command}, \texttt{\_do\_clarification}, \texttt{\_do\_general\_qa}, or the invalid path).
+
+For \texttt{needs\_clarification}, the agent first looks up procedural memory. If a similar past trigger exists with a known action, it skips the question and runs the action right away. Otherwise it asks the user, then records the chosen action in procedural memory once it is resolved.
+
+\subsection{Bottlenecks and Possible Improvements}
+
+The main bottleneck on Pi 5 is the LLM inference time, which is around 4\,s for ambiguous inputs. Three improvements would help:
+\begin{itemize}
+    \item \textbf{Streaming TTS}: start speaking the reply token-by-token instead of waiting for the full JSON. This would mostly hide LLM latency from the user.
+    \item \textbf{Smaller distilled model}: a task-specific distilled 0.5B model could be enough for our four classes after fine-tuning, with $<1$\,s latency.
+    \item \textbf{KV-cache reuse}: the system prompt is the same for every call, so we could pre-compute its KV cache once and reuse it. This would cut around 30\% of the LLM time.
+\end{itemize}
+
+\subsection{How To Use}
+
+The user runs \texttt{python nova.py} on the Pi. The system loads STT, TTS, the LLM, the embedding model, and the memory manager, then enters a continuous VAD loop. The user simply says ``Nova, ...'' followed by a request. There is no app to install on a phone, and no internet connection is needed. A short demo session looks like this:
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize]
+User: Nova, turn on the light.
+Nova: Sure, turning on the light!
+   (LED ring lights up)
+User: Nova, I feel a bit cold.
+Nova: Would you like me to close the window
+      or raise the AC temperature?
+User: close the window.
+Nova: Closing the window now.
+   (Stepper motor moves)
+User: Nova, I feel a bit cold.    [next day]
+Nova: Sure, window close.
+      (based on your past preference)
+\end{lstlisting}
+
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Quantization Benchmark}
+
+We compared five GGUF variants of Qwen2.5-Instruct on the same 20-case test suite, on the same Raspberry Pi 5, with $n\_ctx=768$, $n\_threads=4$, $\text{temperature}=0$, and 3 repetitions per case (median latency). Results are in Table~\ref{tab:quant}.
+
+\begin{table}[h]
+\centering
+\caption{Quantization benchmark on Raspberry Pi 5 (20-case test suite).}
+\label{tab:quant}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Type Acc} & \textbf{Cmd Acc} & \textbf{Avg (ms)} & \textbf{Size (GB)} \\
+\midrule
+1.5B-Q3\_K\_M & 15\% & 20\% & 5007 & 0.8 \\
+1.5B-Q4\_K\_M & 30\% & 0\% & 2728 & 1.1 \\
+1.5B-Q5\_K\_M & 50\% & 80\% & 4028 & 1.3 \\
+3B-Q3\_K\_M & \textbf{85\%} & 80\% & \textbf{3887} & 1.5 \\
+3B-Q4\_K\_M & 75\% & 100\% & 5712 & 2.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key findings:}
+\begin{enumerate}
+    \item \emph{Model size matters more than quantization level.} The jump from 1.5B to 3B gives +35 percentage points in type accuracy across the best variants of each size. Within the same size, quantization level has a smaller effect.
+    \item \emph{General QA is the hardest type for small models.} 1.5B variants score only 20\% on \texttt{general\_qa} and confuse it with \texttt{needs\_clarification}. 3B models score 80\%.
+    \item \emph{3B-Q3\_K\_M is the Pareto-optimal choice.} It has the best type accuracy (85\%), the lowest average latency among the 3B variants, and is 25\% smaller than 3B-Q4\_K\_M. We made it the production default.
+\end{enumerate}
+
+\subsection{Per-Type Accuracy}
+
+\begin{table}[h]
+\centering
+\caption{Per-type accuracy (correct intents / 5 cases per type).}
+\label{tab:per-type}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model} & \textbf{direct} & \textbf{clarif.} & \textbf{qa} & \textbf{invalid} & \textbf{Overall} \\
+\midrule
+1.5B-Q3\_K\_M & 1/5 & 0/5 & 1/5 & 1/5 & 15\% \\
+1.5B-Q4\_K\_M & 1/5 & 2/5 & 1/5 & 2/5 & 30\% \\
+1.5B-Q5\_K\_M & 4/5 & 3/5 & 1/5 & 2/5 & 50\% \\
+3B-Q3\_K\_M & 5/5 & 4/5 & 4/5 & 4/5 & \textbf{85\%} \\
+3B-Q4\_K\_M & 5/5 & 4/5 & 4/5 & 2/5 & 75\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+3B-Q4\_K\_M is interesting: it has 100\% command accuracy but drops on \texttt{invalid} (only 2/5). It tends to over-generate \texttt{needs\_clarification} for short utterances like ``Um.'' or ``Nova.''. 3B-Q3\_K\_M is more balanced, which is what we want in a real assistant.
+
+\subsection{Effect of the Rule-Based Fast Path}
+
+Without the rule-based path, every utterance hits the LLM (\textasciitilde 4\,s on Pi). With the rule-based path, unambiguous direct commands are intercepted in $<5$\,ms. We measured this on the 5 \texttt{direct\_command} cases of the benchmark suite:
+\begin{itemize}
+    \item LLM-only: average 4.2\,s, p95 4.8\,s.
+    \item Rule-first + LLM-fallback: average 4\,ms, p95 7\,ms (all 5 caught by regex).
+\end{itemize}
+This is a 1000$\times$ speedup for the most common requests, which is the difference between a smart home that feels responsive and one that does not.
+
+\subsection{Effect of LoRA Fine-Tuning}
+
+We evaluated the base Qwen2.5-1.5B-Instruct (HuggingFace, float16 on Mac MPS) before and after LoRA fine-tuning on six hard cases that the base model gets wrong. Results in Table~\ref{tab:lora}.
+
+\begin{table}[h]
+\centering
+\caption{LoRA effect on hard cases (Qwen2.5-1.5B base vs. LoRA-merged).}
+\label{tab:lora}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Hard case} & \textbf{Base} & \textbf{LoRA} \\
+\midrule
+``fuck this light.'' & wrong & needs\_clarif. \\
+``make this room lively.'' & direct\_cmd. & needs\_clarif. \\
+``it is boring in here.'' & direct\_cmd. & needs\_clarif. \\
+``it's a bit dark.'' & direct\_cmd. & needs\_clarif. \\
+``can I still eat this dish...'' & direct\_cmd. & general\_qa \\
+``How are you today?'' & needs\_clarif. & invalid \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The LoRA model fixes all 6 hard cases. The biggest gain is on colloquial complaints (``fuck this light'', ``make this room lively''), which the base model never saw enough to handle. This is the case where 225 hand-labelled examples produce a clearly visible improvement.
+
+\subsection{End-to-End Latency Budget}
+
+For a typical direct command on the Pi:
+\begin{itemize}
+    \item VAD listener captures audio: \textasciitilde 0.5\,s after end of speech.
+    \item STT (Whisper tiny.en, int8): \textasciitilde 0.6\,s for a 2--3\,s utterance.
+    \item Rule-based path (regex): $<5$\,ms.
+    \item GPIO + TTS in parallel: \textasciitilde 1.2\,s (TTS dominates).
+    \item Total: about 2.3\,s from end of speech to start of action.
+\end{itemize}
+For a vague utterance the LLM call (\textasciitilde 4\,s) replaces the rule-based step, so total latency is around 6\,s.
+
+\subsection{Memory Behavior Test}
+
+We added a stateful test (\texttt{tests/text\_test.ipynb}, Group B) that shows the procedural memory effect:
+\begin{enumerate}
+    \item Step 1: ``Nova, I feel cold.'' $\rightarrow$ Nova asks for clarification.
+    \item Step 2: User replies ``close the window.'' $\rightarrow$ Action executed; (trigger, action) saved.
+    \item Step 3: A reset between sessions.
+    \item Step 4: ``Nova, I feel cold.'' $\rightarrow$ Nova does not ask; it executes ``close window'' directly because it remembers from step 2.
+\end{enumerate}
+This works because of the cosine-similarity lookup in procedural memory (threshold 0.92).
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We built Nova, a fully offline voice-controlled smart home assistant for Raspberry Pi 5. The system combines Whisper STT, a 3B Qwen2.5 LLM in 3-bit GGUF quantization, a rule-based fast path, a four-layer memory, LoRA fine-tuning, and Piper TTS. Everything runs on-device, with no cloud calls.
+
+\textbf{Key results.} On a fixed 20-case benchmark, our chosen model (Qwen2.5-3B-Instruct Q3\_K\_M) reaches 85\% type accuracy with 3.9\,s average latency on Pi. The rule-based path keeps direct commands at $<5$\,ms. LoRA fine-tuning fixes the hard colloquial cases that small models otherwise miss. Procedural memory removes the second clarification for repeating user patterns.
+
+\textbf{What we learned.} (1) Model size beats quantization level for small intent tasks: a 3B-Q3\_K\_M is more accurate than a 1.5B-Q5\_K\_M and only slightly slower. (2) Hybrid pipelines win on edge devices: regex covers the common case in $<5$\,ms, the LLM only handles the long tail. (3) A small (\textasciitilde 200) hand-labelled dataset is enough for LoRA on a 3B chat model, as long as it covers all output classes including the negatives (\texttt{invalid}, \texttt{general\_qa}).
+
+\textbf{Problems we discovered.} The Whisper \texttt{tiny.en} model often mishears ``Nova'' as other words such as ``Nava'', ``Noba'', or ``Nana''. We worked around this with a list of name variants, but a dedicated wake-word detector (e.g. openWakeWord) would be cleaner. Another open issue is that the assistant currently has no notion of time-of-day, so a learned ``close the window when it is cold'' rule would also fire at noon if the user said the same thing.
+
+\textbf{Future work.} (1) Streaming TTS so the user hears the start of the reply before the LLM finishes. (2) Time-aware procedural memory: include the time of day, the current temperature, and other context signals as part of the trigger. (3) A small distilled model trained only for the four-class task, which should bring LLM latency below 1\,s. (4) Multi-user voice profiles, so different family members can have separate semantic memories.
+
+\section*{Acknowledgment}
+
+We thank Prof. Ching-Yung Lin and the EECS 6895 teaching team at Columbia University for guidance throughout the project.
+
+\begin{thebibliography}{00}
+\bibitem{ring2023} Federal Trade Commission, ``FTC says Ring's lax practices led to disclosure of customers' sensitive video data,'' Press release, 2023.
+\bibitem{radford2023whisper} A. Radford et al., ``Robust speech recognition via large-scale weak supervision,'' in \emph{Proc. ICML}, 2023.
+\bibitem{zhang2024tinyllama} P. Zhang et al., ``TinyLlama: An open-source small language model,'' arXiv:2401.02385, 2024.
+\bibitem{microsoft2023phi2} Microsoft, ``Phi-2: The surprising power of small language models,'' Tech.\ blog, 2023.
+\bibitem{qwen2025} Qwen Team, ``Qwen2.5 technical report,'' arXiv:2412.15115, 2024.
+\bibitem{ggml2024} G. Gerganov et al., ``llama.cpp: Inference of LLaMA model in pure C/C++,'' GitHub, 2023--2025.
+\bibitem{hu2022lora} E.~J. Hu et al., ``LoRA: Low-rank adaptation of large language models,'' in \emph{Proc. ICLR}, 2022.
+\bibitem{lewis2020rag} P. Lewis et al., ``Retrieval-augmented generation for knowledge-intensive NLP tasks,'' in \emph{Proc. NeurIPS}, 2020.
+\bibitem{tulving1972episodic} E. Tulving, ``Episodic and semantic memory,'' in \emph{Organization of Memory}, Academic Press, 1972.
+\bibitem{bastianelli2020slurp} E. Bastianelli et al., ``SLURP: A spoken language understanding resource package,'' in \emph{Proc. EMNLP}, 2020.
+\end{thebibliography}
+
+\end{document}

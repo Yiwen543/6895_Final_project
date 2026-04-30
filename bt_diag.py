@@ -3,10 +3,12 @@
 Bluetooth audio diagnostic script for Nova on Raspberry Pi 5.
 
 Usage:
-    python3 bt_diag.py wifi      # Test WiFi/BT coexistence
-    python3 bt_diag.py quantum   # Test PipeWire quantum size
-    python3 bt_diag.py rssi      # Test Bluetooth signal strength
-    python3 bt_diag.py cpu       # Test CPU competition
+    python3 bt_diag.py wifi       # Test WiFi/BT coexistence
+    python3 bt_diag.py quantum    # Test PipeWire quantum size
+    python3 bt_diag.py rssi       # Test Bluetooth signal strength
+    python3 bt_diag.py cpu        # Test CPU competition (busy-loop threads)
+    python3 bt_diag.py codec      # Check A2DP codec negotiated with speaker
+    python3 bt_diag.py inference  # Test audio under LLM-like cache-intensive load
 """
 
 import argparse
@@ -235,18 +237,122 @@ def cmd_cpu():
         result(False, f"xruns jumped {xrun_idle}→{xrun_loaded} under load — CPU starvation IS the root cause")
 
 
+def cmd_codec():
+    print("\n=== TEST: A2DP Codec ===")
+
+    # 1. pactl list sinks — look for BT sink and its active codec
+    out = subprocess.run(
+        ["pactl", "list", "sinks"],
+        capture_output=True, text=True, env=ENV
+    )
+    in_bt_sink = False
+    codec_line = None
+    for line in out.stdout.splitlines():
+        ls = line.strip()
+        if "bluez" in ls.lower() or BT_MAC.lower() in ls.lower():
+            in_bt_sink = True
+        if in_bt_sink and "codec" in ls.lower():
+            codec_line = ls
+            raw("pactl_codec", ls)
+            break
+    if not in_bt_sink:
+        raw("pactl_bt_sink", "NOT FOUND — speaker may not be connected")
+
+    # 2. pw-dump — look for bluez codec property
+    out2 = subprocess.run(["pw-dump"], capture_output=True, text=True, env=ENV)
+    for line in out2.stdout.splitlines():
+        if ("bluez" in line.lower() or "a2dp" in line.lower()) and "codec" in line.lower():
+            raw("pw_dump_codec", line.strip())
+
+    # 3. bluetoothctl info
+    out3 = subprocess.run(
+        ["bluetoothctl", "info", BT_MAC],
+        capture_output=True, text=True, env=ENV
+    )
+    for line in out3.stdout.splitlines():
+        ls = line.strip()
+        if ls:
+            raw("btctl", ls)
+
+    # Verdict
+    codec_str = (codec_line or "").lower()
+    if any(c in codec_str for c in ["aac", "aptx", "ldac"]):
+        result(True, f"High-quality codec active — codec is NOT the likely cause")
+    elif "sbc" in codec_str:
+        result(False,
+               "SBC codec in use — SBC has low, fixed bitrate and can cause choppy audio; "
+               "fix: install pulseaudio-module-bluetooth-aptx or configure BlueZ AAC profile, "
+               "then pair again")
+    else:
+        result(False,
+               "Could not determine codec from pactl/pw-dump; check output above manually — "
+               "if speaker shows SBC in bluetoothctl, that is likely the cause")
+
+
+def cmd_inference():
+    print("\n=== TEST: Audio under LLM-like Inference Load ===")
+    print("[INFO] This test uses numpy matrix ops to simulate OpenBLAS cache pressure,")
+    print("       which is closer to real llama.cpp behaviour than busy-loop threads.\n")
+    sig = make_signal(duration=10.0)
+
+    print("[INFO] Baseline: playing at idle...")
+    xrun_idle = play_and_count_xruns(sig)
+    raw("xrun_idle", xrun_idle)
+
+    stop_event = threading.Event()
+
+    def matrix_worker():
+        # 512×512 float32 matmul: ~0.5 GB/s memory bandwidth per thread,
+        # matching a single llama.cpp matrix multiply step on Pi 5.
+        A = np.random.randn(512, 512).astype(np.float32)
+        B = np.random.randn(512, 512).astype(np.float32)
+        while not stop_event.is_set():
+            np.dot(A, B)
+
+    threads = [threading.Thread(target=matrix_worker, daemon=True) for _ in range(4)]
+    for t in threads:
+        t.start()
+    time.sleep(0.5)
+
+    print("[INFO] Playing under 4-thread matrix-multiply load...")
+    xrun_loaded = play_and_count_xruns(sig)
+    raw("xrun_loaded", xrun_loaded)
+
+    stop_event.set()
+    for t in threads:
+        t.join(timeout=2)
+
+    passed = xrun_loaded <= xrun_idle + 2
+    if passed:
+        result(True,
+               f"xruns {xrun_idle}→{xrun_loaded} under matrix load — "
+               "inference cache pressure is NOT the cause")
+    else:
+        result(False,
+               f"xruns jumped {xrun_idle}→{xrun_loaded} under matrix load — "
+               "cache-intensive LLM inference IS starving the BT audio thread; "
+               "fix: sudo chrt -f -p 99 $(pidof pipewire)  OR  "
+               "pw-metadata -n settings 0 clock.force-quantum 4096")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Nova Bluetooth audio diagnostic tool"
     )
     parser.add_argument(
         "test",
-        choices=["wifi", "quantum", "rssi", "cpu"],
+        choices=["wifi", "quantum", "rssi", "cpu", "codec", "inference"],
         help="Which diagnostic test to run",
     )
     args = parser.parse_args()
-    {"wifi": cmd_wifi, "quantum": cmd_quantum,
-     "rssi": cmd_rssi, "cpu": cmd_cpu}[args.test]()
+    {
+        "wifi":      cmd_wifi,
+        "quantum":   cmd_quantum,
+        "rssi":      cmd_rssi,
+        "cpu":       cmd_cpu,
+        "codec":     cmd_codec,
+        "inference": cmd_inference,
+    }[args.test]()
 
 
 if __name__ == "__main__":

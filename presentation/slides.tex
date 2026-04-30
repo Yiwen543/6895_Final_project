@@ -1,0 +1,366 @@
+% Nova Smart Home Assistant - EECS 6895 Final Presentation
+% Compile on Overleaf with the "pdfLaTeX" engine.
+% Theme: Madrid, customizable.
+
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usecolortheme{seahorse}
+\setbeamertemplate{navigation symbols}{}
+
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  breaklines=true,
+  showstringspaces=false,
+}
+
+\title[Nova]{Nova: An Offline Voice-Controlled Smart Home Assistant on Raspberry Pi 5}
+\subtitle{EECS 6895 Final Project}
+\author{Team Member A \and Team Member B \and Team Member C}
+\institute{Columbia University}
+\date{May 5, 2026}
+
+\begin{document}
+
+% ============================================================
+% Slide 1 — Title
+% ============================================================
+\begin{frame}
+\titlepage
+\end{frame}
+
+% ============================================================
+% Slide 2 — Motivation / Goal & Novelty
+% ============================================================
+\begin{frame}{Motivation: Why Build Another Voice Assistant?}
+\textbf{Today's voice assistants depend on the cloud.}
+\begin{itemize}
+  \item Every command is sent to a remote server $\rightarrow$ privacy risk.
+  \item No internet $\rightarrow$ assistant stops working.
+  \item User has no control over data.
+\end{itemize}
+\vspace{0.4em}
+\textbf{Our question:} can a \$80 Raspberry Pi 5 do all of this offline?
+\vspace{0.4em}
+\textbf{Goal:} build \textbf{Nova} — a fully offline voice assistant that does
+\begin{itemize}
+  \item STT, intent parsing, dialogue, TTS, and real GPIO control on-device.
+  \item No internet. No cloud. Everything stays on the Pi.
+\end{itemize}
+\end{frame}
+
+% ============================================================
+% Slide 3 — Novelty
+% ============================================================
+\begin{frame}{What Makes Nova Different}
+\begin{itemize}
+  \item \textbf{Hybrid pipeline:} regex fast path covers $\sim$70\% of commands in $<$5\,ms; LLM only for ambiguous inputs.
+  \item \textbf{Quantization study:} controlled comparison of 5 GGUF variants of Qwen2.5 on the same Pi 5.
+  \item \textbf{Four-layer memory:} working / episodic / semantic / procedural — agent learns user preferences and skips repeated clarifications.
+  \item \textbf{LoRA fine-tuning} on 225 hand-labelled examples for 4 intent classes.
+  \item \textbf{Real hardware demo:} LED ring + stepper-motor curtain controlled by GPIO, all driven by voice.
+\end{itemize}
+\end{frame}
+
+% ============================================================
+% Slide 4 — System Overview / Pipeline
+% ============================================================
+\begin{frame}{System Pipeline}
+\centering
+\small
+\fbox{\parbox{0.85\linewidth}{
+\centering
+Microphone $\rightarrow$ VAD listener (energy threshold) \\
+$\downarrow$ \\
+Whisper STT (\texttt{tiny.en}, int8) \\
+$\downarrow$ \\
+Wake-word filter (``nova'' + variants) \\
+$\downarrow$ \\
+\textbf{Rule-based fast path} (regex) \\
+$\downarrow$ \emph{(only if no rule match)} \\
+\textbf{LLM} (Qwen2.5-3B-Instruct Q3\_K\_M, llama.cpp) \\
+$\downarrow$ \\
+NovaAgent dispatcher (4 intent types) \\
+$\downarrow$ \\
+Memory update + Schema validation \\
+$\downarrow$ \\
+\textbf{GPIO action} $\parallel$ \textbf{Piper TTS} (parallel threads)
+}}
+
+\vspace{0.5em}
+All on a single Raspberry Pi 5, fully offline.
+\end{frame}
+
+% ============================================================
+% Slide 5 — Tech Stack
+% ============================================================
+\begin{frame}{Tech Stack}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.5\textwidth}
+\textbf{Hardware}
+\begin{itemize}
+\item Raspberry Pi 5 (8\,GB)
+\item ReSpeaker 2-Mics HAT
+\item Grove RGB LED
+\item ULN2003 stepper motor (curtain)
+\item USB mic + Bluetooth speaker
+\end{itemize}
+
+\textbf{Models}
+\begin{itemize}
+\item STT: faster-whisper tiny.en (int8)
+\item LLM: Qwen2.5-3B-Instruct Q3\_K\_M
+\item Embeddings: all-MiniLM-L6-v2
+\item TTS: Piper en\_US-lessac
+\end{itemize}
+\end{column}
+\begin{column}{0.5\textwidth}
+\textbf{Software}
+\begin{itemize}
+\item llama-cpp-python (OpenBLAS, ARM)
+\item HuggingFace transformers + peft + trl
+\item ChromaDB (vector store)
+\item sentence-transformers
+\item lgpio (GPIO control)
+\item systemd (auto-start)
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+% Slide 6 — Data
+% ============================================================
+\begin{frame}{Data: Custom Dataset for 4 Intent Classes}
+No public dataset matches our 4-class smart-home task.
+We hand-built \textbf{225 (utterance, JSON)} pairs.
+\vspace{0.5em}
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lc}
+\toprule
+\textbf{Intent class} & \textbf{Count} \\
+\midrule
+\texttt{direct\_command} & 76 \\
+\texttt{needs\_clarification} & 65 \\
+\texttt{general\_qa} & 60 \\
+\texttt{invalid} & 24 \\
+\midrule
+Total & 225 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\vspace{0.5em}
+\textbf{Hard cases we made sure to include:}
+\begin{itemize}
+\item Colloquial: ``fuck this light'', ``this room sucks''
+\item Vague: ``I feel cold'', ``it's a bit dark''
+\item Confusing: ``can I still eat this dish from yesterday?'' (\emph{not} a device command)
+\end{itemize}
+\end{frame}
+
+% ============================================================
+% Slide 7 — Methods: Unified JSON
+% ============================================================
+\begin{frame}[fragile]{Method 1: Unified JSON Output}
+All four intent types share \textbf{one} schema. The agent dispatches on the \texttt{type} field.
+\begin{lstlisting}
+{"type":"direct_command","device":"light",
+ "action":"turn_on","value":null,
+ "reply":"Sure, turning on the light!"}
+
+{"type":"needs_clarification",
+ "question":"...","options":[...],"reply":"..."}
+
+{"type":"general_qa","answer":"..."}
+
+{"type":"invalid"}
+\end{lstlisting}
+\vspace{0.3em}
+\textbf{Why?} Single dispatch table; cleaner LoRA loss; easy to validate.
+\end{frame}
+
+% ============================================================
+% Slide 8 — Methods: Hybrid Rule + LLM
+% ============================================================
+\begin{frame}{Method 2: Hybrid Rule-Based + LLM}
+\textbf{Observation:} most home commands are short and unambiguous.
+\vspace{0.3em}
+\begin{itemize}
+\item Regex catches 8--10 patterns: ``turn on/off the light'', ``set AC to N degrees'', ``open/close the curtain'', ``set brightness to N'', etc.
+\item If a regex matches: return command in $<5$\,ms.
+\item Else: fall back to LLM ($\sim$4\,s on Pi).
+\end{itemize}
+\vspace{0.3em}
+\textbf{Effect on the 5 direct\_command benchmark cases:}
+\begin{itemize}
+\item LLM-only: avg \textbf{4.2\,s}
+\item Rule + LLM-fallback: avg \textbf{4\,ms} ($\sim$1000$\times$ speedup)
+\end{itemize}
+\end{frame}
+
+% ============================================================
+% Slide 9 — Methods: Four-Layer Memory
+% ============================================================
+\begin{frame}{Method 3: Four-Layer Memory}
+\begin{table}[h]
+\centering
+\scriptsize
+\begin{tabular}{llll}
+\toprule
+\textbf{Layer} & \textbf{Storage} & \textbf{Lifetime} & \textbf{Purpose} \\
+\midrule
+Working & RAM deque & current session & last 8 turns \\
+Episodic & ChromaDB & persistent & RAG retrieval of past interactions \\
+Semantic & JSON & persistent & user preferences (e.g. preferred AC temp) \\
+Procedural & JSON & persistent & learned trigger $\rightarrow$ action patterns \\
+\bottomrule
+\end{tabular}
+\end{table}
+\vspace{0.5em}
+\textbf{Procedural memory in action:}
+\begin{enumerate}
+\item Day 1: ``I feel cold'' $\rightarrow$ Nova asks $\rightarrow$ user picks ``close the window'' $\rightarrow$ saved.
+\item Day 2: ``I feel cold'' $\rightarrow$ Nova \textbf{skips the question} and just closes the window.
+\end{enumerate}
+Cosine-similarity lookup with \texttt{all-MiniLM-L6-v2} embeddings; threshold 0.92.
+\end{frame}
+
+% ============================================================
+% Slide 10 — Methods: LoRA Fine-Tuning
+% ============================================================
+\begin{frame}{Method 4: LoRA Fine-Tuning}
+\textbf{Goal:} make a 1.5--3B model reliably handle our 4 classes, including the hard cases.
+\vspace{0.4em}
+\textbf{Setup:}
+\begin{itemize}
+\item Base: Qwen2.5-1.5B-Instruct (also tested with 3B)
+\item LoRA: $r{=}8$, $\alpha{=}16$, 7 target modules (q,k,v,o,gate,up,down)
+\item Trainable params: $\sim$0.44\% ($\sim$6.8\,M of 1.55\,B)
+\item 3 epochs, batch 1, grad-accum 8, LR $2{\times}10^{-4}$, cosine warmup
+\item TRL \texttt{SFTTrainer} with response-only loss masking
+\end{itemize}
+\vspace{0.4em}
+\textbf{Output:} adapter ($\sim$50\,MB) merged into base weights, then exported to GGUF for the Pi.
+\end{frame}
+
+% ============================================================
+% Slide 11 — Experiments: Quantization
+% ============================================================
+\begin{frame}{Experiment 1: Quantization Benchmark on Pi 5}
+20-case test suite, identical settings, 3 reps per case (median latency).
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Type Acc} & \textbf{Cmd Acc} & \textbf{Avg (ms)} & \textbf{Size (GB)} \\
+\midrule
+1.5B-Q3\_K\_M & 15\% & 20\% & 5007 & 0.8 \\
+1.5B-Q4\_K\_M & 30\% & 0\% & 2728 & 1.1 \\
+1.5B-Q5\_K\_M & 50\% & 80\% & 4028 & 1.3 \\
+\textbf{3B-Q3\_K\_M} & \textbf{85\%} & 80\% & \textbf{3887} & \textbf{1.5} \\
+3B-Q4\_K\_M & 75\% & 100\% & 5712 & 2.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\vspace{0.4em}
+\textbf{Conclusion:} model size matters more than quantization level. 3B-Q3\_K\_M is Pareto-optimal $\rightarrow$ chosen as production.
+\end{frame}
+
+% ============================================================
+% Slide 12 — Experiments: LoRA effect
+% ============================================================
+\begin{frame}{Experiment 2: LoRA on Hard Cases}
+Six cases that the base 1.5B model gets wrong:
+\begin{table}[h]
+\centering
+\scriptsize
+\begin{tabular}{lcc}
+\toprule
+\textbf{Hard case} & \textbf{Base} & \textbf{After LoRA} \\
+\midrule
+``fuck this light.'' & wrong & needs\_clarif. \checkmark \\
+``make this room lively.'' & direct\_cmd. & needs\_clarif. \checkmark \\
+``it is boring in here.'' & direct\_cmd. & needs\_clarif. \checkmark \\
+``it's a bit dark.'' & direct\_cmd. & needs\_clarif. \checkmark \\
+``can I still eat this dish...'' & direct\_cmd. & general\_qa \checkmark \\
+``How are you today?'' & needs\_clarif. & invalid \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+\vspace{0.4em}
+\textbf{Result:} LoRA fixes \textbf{all 6 hard cases}. Biggest gain: colloquial complaints.
+\end{frame}
+
+% ============================================================
+% Slide 13 — Experiments: End-to-end Latency
+% ============================================================
+\begin{frame}{End-to-End Latency Budget on Pi 5}
+\textbf{Direct command (e.g. ``turn on the light''):}
+\begin{itemize}
+\item VAD end-of-speech: $\sim$0.5\,s
+\item STT (Whisper tiny.en, int8): $\sim$0.6\,s
+\item Rule-based path: $<5$\,ms
+\item GPIO + TTS in parallel: $\sim$1.2\,s
+\item \textbf{Total $\approx$ 2.3\,s}
+\end{itemize}
+\vspace{0.5em}
+\textbf{Vague utterance (e.g. ``I feel cold''):}
+\begin{itemize}
+\item Same as above but LLM ($\sim$4\,s) replaces regex
+\item \textbf{Total $\approx$ 6\,s}
+\end{itemize}
+\vspace{0.5em}
+\textbf{Procedural memory hit (2nd time saying ``I feel cold''):}
+\begin{itemize}
+\item Skips LLM completely $\rightarrow$ \textbf{back to $\sim$2.3\,s}
+\end{itemize}
+\end{frame}
+
+% ============================================================
+% Slide 14 — Live Demo
+% ============================================================
+\begin{frame}{Live Demo}
+\begin{itemize}
+\item Direct command: ``Nova, turn on the light.'' $\rightarrow$ LED lights up.
+\item Brightness: ``Nova, set brightness to 30 percent.''
+\item RGB cycle: ``Nova, start RGB mode.''
+\item Curtain (stepper motor): ``Nova, close the curtain.''
+\item Vague: ``Nova, I feel cold.'' $\rightarrow$ clarification.
+\item User chooses; Nova \emph{remembers} for next time.
+\item General QA: ``Nova, how do I store leftovers?'' $\rightarrow$ spoken answer, no device action.
+\end{itemize}
+\vspace{0.5em}
+\centering
+\textit{All offline. No cloud. No internet.}
+\end{frame}
+
+% ============================================================
+% Slide 15 — Conclusion
+% ============================================================
+\begin{frame}{Conclusion and Future Work}
+\textbf{Key results.}
+\begin{itemize}
+\item Fully offline pipeline running on a single Pi 5.
+\item 85\% type accuracy with 3.9\,s avg latency (3B-Q3\_K\_M).
+\item Rule-based path: $\sim$1000$\times$ speedup for direct commands.
+\item LoRA fixes all hard cases on a 225-sample dataset.
+\item Procedural memory removes repeated clarifications.
+\end{itemize}
+\vspace{0.4em}
+\textbf{Lessons.} (1) Model size $>$ quantization level for small intent tasks. (2) Hybrid pipelines win on edge. (3) Small hand-labelled data is enough for LoRA on a 3B chat model.
+\vspace{0.4em}
+\textbf{Future work.} Streaming TTS \textbullet\ Time-aware procedural memory \textbullet\ Distilled $\le$ 0.5B model for $<1$\,s LLM latency \textbullet\ Multi-user voice profiles.
+\vspace{0.6em}
+\centering
+\textbf{Thank you. Questions?}
+\end{frame}
+
+\end{document}
