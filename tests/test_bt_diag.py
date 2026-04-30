@@ -140,3 +140,27 @@ def test_cmd_cpu_runs(monkeypatch):
     from bt_diag import cmd_cpu
     cmd_cpu()
     assert calls.count("play") == 2
+
+def test_main_dispatches_correctly(monkeypatch):
+    called = []
+    monkeypatch.setattr("bt_diag.cmd_wifi",    lambda: called.append("wifi"))
+    monkeypatch.setattr("bt_diag.cmd_quantum", lambda: called.append("quantum"))
+    monkeypatch.setattr("bt_diag.cmd_rssi",    lambda: called.append("rssi"))
+    monkeypatch.setattr("bt_diag.cmd_cpu",     lambda: called.append("cpu"))
+
+    import sys
+    from bt_diag import main
+
+    for cmd in ["wifi", "quantum", "rssi", "cpu"]:
+        called.clear()
+        monkeypatch.setattr(sys, "argv", ["bt_diag.py", cmd])
+        main()
+        assert called == [cmd]
+
+def test_main_unknown_command_exits(monkeypatch):
+    import sys
+    import pytest
+    monkeypatch.setattr(sys, "argv", ["bt_diag.py", "badcmd"])
+    from bt_diag import main
+    with pytest.raises(SystemExit):
+        main()

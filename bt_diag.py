@@ -233,3 +233,21 @@ def cmd_cpu():
         result(True, f"xruns {xrun_idle}→{xrun_loaded} under load — CPU is NOT the cause")
     else:
         result(False, f"xruns jumped {xrun_idle}→{xrun_loaded} under load — CPU starvation IS the root cause")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Nova Bluetooth audio diagnostic tool"
+    )
+    parser.add_argument(
+        "test",
+        choices=["wifi", "quantum", "rssi", "cpu"],
+        help="Which diagnostic test to run",
+    )
+    args = parser.parse_args()
+    {"wifi": cmd_wifi, "quantum": cmd_quantum,
+     "rssi": cmd_rssi, "cpu": cmd_cpu}[args.test]()
+
+
+if __name__ == "__main__":
+    main()
