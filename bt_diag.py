@@ -99,3 +99,46 @@ def cmd_wifi():
         result(True, "xrun count unchanged with WiFi on/off — WiFi is NOT the cause")
     else:
         result(False, f"xruns dropped {xrun_on}→{xrun_off} when WiFi disconnected — WiFi IS the root cause")
+
+
+def cmd_quantum():
+    print("\n=== TEST: PipeWire Quantum Size ===")
+    sig = make_signal()
+
+    out = subprocess.run(
+        ["pw-metadata", "-n", "settings"],
+        capture_output=True, text=True, env=ENV
+    )
+    current_quantum = "1024"
+    for line in out.stdout.splitlines():
+        if "clock.force-quantum" in line or "clock.quantum" in line:
+            parts = line.split("'")
+            if len(parts) >= 4:
+                current_quantum = parts[3]
+                break
+    raw("quantum_current", current_quantum)
+
+    print(f"[INFO] Playing at quantum={current_quantum}...")
+    xrun_default = play_and_count_xruns(sig)
+    raw("xrun_default_quantum", xrun_default)
+
+    subprocess.run(
+        ["pw-metadata", "-n", "settings", "0", "clock.force-quantum", "2048"],
+        capture_output=True, env=ENV
+    )
+    time.sleep(0.5)
+
+    print("[INFO] Playing at quantum=2048...")
+    xrun_large = play_and_count_xruns(sig)
+    raw("xrun_quantum_2048", xrun_large)
+
+    subprocess.run(
+        ["pw-metadata", "-n", "settings", "0", "clock.force-quantum", current_quantum],
+        capture_output=True, env=ENV
+    )
+
+    passed = abs(xrun_default - xrun_large) <= 2
+    if passed:
+        result(True, "xrun count unchanged with larger quantum — quantum is NOT the cause")
+    else:
+        result(False, f"xruns dropped {xrun_default}→{xrun_large} with quantum=2048 — quantum IS the root cause")
