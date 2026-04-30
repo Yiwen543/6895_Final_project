@@ -1,0 +1,136 @@
+llama_context: n_ctx_seq (768) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+llama_context: n_ctx_seq (768) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+llama_context: n_ctx_seq (768) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+llama_context: n_ctx_seq (768) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+llama_context: n_ctx_seq (768) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+
+============================================================
+  Model: 1.5B-Q3_K_M  (models/qwen2.5-1.5b-instruct-q3_k_m.gguf)
+============================================================
+  [01/20] ✓   11133ms  direct_command         → direct_command
+  [02/20] ✗     245ms  direct_command         → invalid
+  [03/20] ✗     691ms  direct_command         → invalid
+  [04/20] ✗     253ms  direct_command         → invalid
+  [05/20] ✗     170ms  direct_command         → invalid
+  [06/20] ✗     186ms  needs_clarification    → invalid
+  [07/20] ✗     389ms  needs_clarification    → invalid
+  [08/20] ✗     513ms  needs_clarification    → invalid
+  [09/20] ✗     509ms  needs_clarification    → invalid
+  [10/20] ✗     178ms  needs_clarification    → invalid
+  [11/20] ✗   10727ms  general_qa             → direct_command
+  [12/20] ✗   12660ms  general_qa             → direct_command
+  [13/20] ✓    7459ms  general_qa             → general_qa
+  [14/20] ✗    9104ms  general_qa             → direct_command
+  [15/20] ✗   14051ms  general_qa             → direct_command
+  [16/20] ✓    2202ms  invalid                → invalid
+  [17/20] ✗    9362ms  invalid                → direct_command
+  [18/20] ✗   14854ms  invalid                → needs_clarification
+  [19/20] ✗    3563ms  invalid                → needs_clarification
+  [20/20] ✗    1883ms  invalid                → direct_command
+
+============================================================
+  Model: 1.5B-Q4_K_M  (models/qwen2.5-1.5b-instruct-q4_k_m.gguf)
+============================================================
+  [01/20] ✗     271ms  direct_command         → invalid
+  [02/20] ✗      91ms  direct_command         → invalid
+  [03/20] ✗      91ms  direct_command         → invalid
+  [04/20] ✓    2489ms  direct_command         → direct_command
+  [05/20] ✗      93ms  direct_command         → invalid
+  [06/20] ✗      91ms  needs_clarification    → invalid
+  [07/20] ✗      92ms  needs_clarification    → invalid
+  [08/20] ✓    4830ms  needs_clarification    → needs_clarification
+  [09/20] ✓    4613ms  needs_clarification    → needs_clarification
+  [10/20] ✗    5330ms  needs_clarification    → invalid
+  [11/20] ✗    2755ms  general_qa             → needs_clarification
+  [12/20] ✗    3285ms  general_qa             → needs_clarification
+  [13/20] ✓    1788ms  general_qa             → general_qa
+  [14/20] ✗    4195ms  general_qa             → needs_clarification
+  [15/20] ✗    5343ms  general_qa             → invalid
+  [16/20] ✓     536ms  invalid                → invalid
+  [17/20] ✗    4183ms  invalid                → needs_clarification
+  [18/20] ✓    5337ms  invalid                → invalid
+  [19/20] ✗    4781ms  invalid                → needs_clarification
+  [20/20] ✗    4372ms  invalid                → needs_clarification
+
+============================================================
+  Model: 1.5B-Q5_K_M  (models/qwen2.5-1.5b-instruct-q5_k_m.gguf)
+============================================================
+  [01/20] ✓    3216ms  direct_command         → direct_command
+  [02/20] ✓    3223ms  direct_command         → direct_command
+  [03/20] ✗     140ms  direct_command         → invalid
+  [04/20] ✓    3127ms  direct_command         → direct_command
+  [05/20] ✓    3322ms  direct_command         → direct_command
+  [06/20] ✗     110ms  needs_clarification    → invalid
+  [07/20] ✓    5827ms  needs_clarification    → needs_clarification
+  [08/20] ✓    5793ms  needs_clarification    → needs_clarification
+  [09/20] ✓    5542ms  needs_clarification    → needs_clarification
+  [10/20] ✗    6399ms  needs_clarification    → invalid
+  [11/20] ✗    3310ms  general_qa             → needs_clarification
+  [12/20] ✗    3735ms  general_qa             → needs_clarification
+  [13/20] ✓    2136ms  general_qa             → general_qa
+  [14/20] ✗    5016ms  general_qa             → needs_clarification
+  [15/20] ✗    6407ms  general_qa             → needs_clarification
+  [16/20] ✓     642ms  invalid                → invalid
+  [17/20] ✗    5759ms  invalid                → needs_clarification
+  [18/20] ✗    5231ms  invalid                → needs_clarification
+  [19/20] ✓    6396ms  invalid                → invalid
+  [20/20] ✗    5228ms  invalid                → needs_clarification
+
+============================================================
+  Model: 3B-Q3_K_M  (models/qwen2.5-3b-instruct-q3_k_m.gguf)
+============================================================
+  [01/20] ✓    4397ms  direct_command         → direct_command
+  [02/20] ✓    4719ms  direct_command         → direct_command
+  [03/20] ✓    4842ms  direct_command         → direct_command
+  [04/20] ✓    4317ms  direct_command         → direct_command
+  [05/20] ✓    4532ms  direct_command         → direct_command
+  [06/20] ✓    7581ms  needs_clarification    → needs_clarification
+  [07/20] ✓    7865ms  needs_clarification    → needs_clarification
+  [08/20] ✓    7573ms  needs_clarification    → needs_clarification
+  [09/20] ✗     875ms  needs_clarification    → invalid
+  [10/20] ✓    5687ms  needs_clarification    → needs_clarification
+  [11/20] ✓    2334ms  general_qa             → general_qa
+  [12/20] ✗     875ms  general_qa             → invalid
+  [13/20] ✓    2919ms  general_qa             → general_qa
+  [14/20] ✓    4371ms  general_qa             → general_qa
+  [15/20] ✓    4517ms  general_qa             → general_qa
+  [16/20] ✓     997ms  invalid                → invalid
+  [17/20] ✓     875ms  invalid                → invalid
+  [18/20] ✗    6570ms  invalid                → needs_clarification
+  [19/20] ✓     877ms  invalid                → invalid
+  [20/20] ✓    1011ms  invalid                → invalid
+
+============================================================
+  Model: 3B-Q4_K_M  (models/qwen2.5-3b-instruct-q4_k_m.gguf)
+============================================================
+  [01/20] ✓    5549ms  direct_command         → direct_command
+  [02/20] ✓    5586ms  direct_command         → direct_command
+  [03/20] ✓    6021ms  direct_command         → direct_command
+  [04/20] ✓    5405ms  direct_command         → direct_command
+  [05/20] ✓    5731ms  direct_command         → direct_command
+  [06/20] ✓    9614ms  needs_clarification    → needs_clarification
+  [07/20] ✓    9982ms  needs_clarification    → needs_clarification
+  [08/20] ✓    9618ms  needs_clarification    → needs_clarification
+  [09/20] ✗    1110ms  needs_clarification    → invalid
+  [10/20] ✓   10732ms  needs_clarification    → needs_clarification
+  [11/20] ✓    4256ms  general_qa             → general_qa
+  [12/20] ✗    1112ms  general_qa             → invalid
+  [13/20] ✓    3702ms  general_qa             → general_qa
+  [14/20] ✓    3705ms  general_qa             → general_qa
+  [15/20] ✓    6654ms  general_qa             → general_qa
+  [16/20] ✓    1113ms  invalid                → invalid
+  [17/20] ✗    6874ms  invalid                → needs_clarification
+  [18/20] ✗    9629ms  invalid                → needs_clarification
+  [19/20] ✓    1109ms  invalid                → invalid
+  [20/20] ✗    6737ms  invalid                → needs_clarification
+
+| Model        | Type Acc | Cmd Acc | Avg (ms) | P95 (ms) | Size (GB) |
+|--------------|----------|---------|----------|----------|-----------|
+| 1.5B-Q3_K_M  |     15% |     20% |     5007 |    14051 |      0.8 |
+| 1.5B-Q4_K_M  |     30% |      0% |     2728 |     5337 |      1.1 |
+| 1.5B-Q5_K_M  |     50% |     80% |     4028 |     6399 |      1.3 |
+| 3B-Q3_K_M    |     85% |     80% |     3887 |     7581 |      1.5 |
+| 3B-Q4_K_M    |     75% |    100% |     5712 |     9982 |      2.0 |
+
+Saved: benchmark_results.csv
+Saved: benchmark_results.md
