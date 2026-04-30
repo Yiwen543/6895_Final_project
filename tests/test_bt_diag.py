@@ -25,3 +25,37 @@ def test_play_returns_int():
         mock_sd.OutputStream.return_value.__exit__ = mock.MagicMock(return_value=False)
         result = play_and_count_xruns(sig, rate=22050)
     assert isinstance(result, int)
+
+def test_callback_stops_on_buffer_exhausted():
+    """Callback raises CallbackStop when signal is exhausted."""
+    import unittest.mock as mock
+    from bt_diag import play_and_count_xruns, make_signal
+
+    callbacks_stopped = []
+
+    class FakeStream:
+        def __init__(self, **kwargs):
+            self._cb = kwargs["callback"]
+        def __enter__(self):
+            # Invoke callback with a full-size outdata to drain the signal
+            outdata = np.zeros((2205, 1), dtype=np.float32)
+            status = mock.MagicMock()
+            status.output_underflow = False
+            # Feed signal in chunks until CallbackStop
+            try:
+                for _ in range(100):
+                    self._cb(outdata, 2205, None, status)
+            except Exception as e:
+                callbacks_stopped.append(str(type(e).__name__))
+            return self
+        def __exit__(self, *a):
+            return False
+
+    sig = make_signal(duration=0.1, rate=22050)  # 2205 samples
+    with mock.patch("bt_diag.sd.OutputStream", FakeStream):
+        with mock.patch("bt_diag.threading.Event") as mock_evt:
+            mock_evt.return_value.wait = lambda timeout=None: None
+            result = play_and_count_xruns(sig, rate=22050)
+
+    assert isinstance(result, int)
+    assert "CallbackStop" in callbacks_stopped

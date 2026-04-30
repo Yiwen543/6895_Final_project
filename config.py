@@ -17,7 +17,7 @@ else:
     LLM_DEVICE        = "cpu"
     LLM_DTYPE         = torch.float32
 
-LLM_MAX_NEW_TOKENS = 120
+LLM_MAX_NEW_TOKENS = 150
 
 # ── STT (Whisper) ─────────────────────────────────────────────────────────────
 WHISPER_MODEL_SIZE   = "tiny.en"
@@ -42,7 +42,7 @@ ASSISTANT_NAME_VARIANTS = [
 SAMPLE_RATE           = 16000
 CHANNELS              = 1
 AUDIO_DTYPE           = "float32"
-ENERGY_THRESHOLD      = 0.15
+ENERGY_THRESHOLD      = 0.05
 
 FRAME_DURATION        = 0.1
 FRAME_SAMPLES         = int(SAMPLE_RATE * FRAME_DURATION)

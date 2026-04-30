@@ -34,6 +34,7 @@ def play_and_count_xruns(signal: np.ndarray, rate: int = 22050) -> int:
     """Play signal via sounddevice OutputStream; return number of output underflows."""
     xruns = 0
     pos = 0
+    done = threading.Event()
 
     def callback(outdata, frames, time_info, status):
         nonlocal xruns, pos
@@ -44,6 +45,8 @@ def play_and_count_xruns(signal: np.ndarray, rate: int = 22050) -> int:
         outdata[:chunk, 0] = signal[pos:pos + chunk]
         if chunk < frames:
             outdata[chunk:] = 0
+            done.set()
+            raise sd.CallbackStop
         pos += chunk
 
     with sd.OutputStream(
@@ -52,8 +55,7 @@ def play_and_count_xruns(signal: np.ndarray, rate: int = 22050) -> int:
         dtype="float32",
         callback=callback,
     ):
-        duration = len(signal) / rate
-        time.sleep(duration + 0.2)
+        done.wait(timeout=len(signal) / rate + 2.0)
 
     return xruns
 

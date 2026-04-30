@@ -70,7 +70,8 @@ class STTModel:
         buf.seek(0)
         segs, _ = self._model.transcribe(
             buf, beam_size=1, language="en",
-            initial_prompt="Nova,", condition_on_previous_text=False,
+            initial_prompt="Nova, I feel cold. Turn on the light. Open the curtain. Set AC to twenty-four degrees.",
+            condition_on_previous_text=False,
         )
         return " ".join(s.text.strip() for s in segs).strip()
 
@@ -99,9 +100,15 @@ class TTSEngine:
                 return
             audio = np.concatenate([c.audio_float_array for c in chunks])
             rate = chunks[0].sample_rate
-            stereo = np.stack([audio, audio], axis=1)
-            sd.play(stereo, rate, device=_OUTPUT_DEVICE)
-            sd.wait()
+            # Write to temp WAV and play via pw-play (PipeWire native,
+            # avoids ALSA→PipeWire-pulse jitter on Bluetooth).
+            import tempfile, subprocess, os
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                path = f.name
+            sf.write(path, audio, rate)
+            env = {**os.environ, "XDG_RUNTIME_DIR": "/run/user/1000"}
+            subprocess.run(["pw-play", path], env=env, check=False)
+            os.unlink(path)
         except Exception as e:
             print("[TTS ERROR]", e)
 
@@ -196,27 +203,31 @@ class AudioListener:
     def continuous_loop(self):
         print("Listening... Say 'Nova' to start a command. Ctrl+C to stop.\n")
         try:
-            with sd.InputStream(
-                samplerate=SAMPLE_RATE,
-                channels=CHANNELS,
-                dtype=AUDIO_DTYPE,
-                blocksize=FRAME_SAMPLES,
-                device=_INPUT_DEVICE,
-            ) as stream:
-                while True:
-                    print("[Listener] Waiting for speech ...")
+            while True:
+                print("[Listener] Waiting for speech ...")
+                # Open stream only for utterance collection; close before TTS
+                # so the microphone buffer doesn't accumulate speaker audio.
+                with sd.InputStream(
+                    samplerate=SAMPLE_RATE,
+                    channels=CHANNELS,
+                    dtype=AUDIO_DTYPE,
+                    blocksize=FRAME_SAMPLES,
+                    device=_INPUT_DEVICE,
+                ) as stream:
+                    time.sleep(0.1)  # let stream buffer stabilize
                     audio = self._collect_utterance(stream)
-                    if audio is None:
-                        continue
 
-                    t0 = time.perf_counter()
-                    text = self._stt.transcribe(audio)
-                    stt_ms = (time.perf_counter() - t0) * 1000
-                    print(f"[STT {stt_ms:.0f} ms] {text!r}")
+                if audio is None:
+                    continue
 
-                    result = self._agent.handle(text, verbose=True)
-                    print("[Result]", result)
-                    print("-" * 60)
+                t0 = time.perf_counter()
+                text = self._stt.transcribe(audio)
+                stt_ms = (time.perf_counter() - t0) * 1000
+                print(f"[STT {stt_ms:.0f} ms] {text!r}")
+
+                result = self._agent.handle(text, verbose=True)
+                print("[Result]", result)
+                print("-" * 60)
 
         except KeyboardInterrupt:
             print("\nListening stopped.")

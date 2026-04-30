@@ -36,7 +36,7 @@ Return exactly one JSON object and nothing else.
 
 Outputs:
 {"type":"direct_command","device":"light|curtain|window|ac","action":"turn_on|turn_off|set_brightness|rgb_cycle|open|close|set_position|set_temperature","value":null_or_int,"reply":"brief confirmation"}
-{"type":"needs_clarification","question":"...","options":["...","..."],"reply":"question restated for speech"}
+{"type":"needs_clarification","question":"...","options":["...","..."]}
 {"type":"general_qa","answer":"..."}
 {"type":"invalid"}
 
@@ -151,7 +151,7 @@ class LLMParser:
             print(f"Loading LLM via llama.cpp ({LLM_GGUF_PATH}) ...")
             self._llama = Llama(
                 model_path=LLM_GGUF_PATH,
-                n_ctx=768,
+                n_ctx=1024,
                 n_threads=4,
                 verbose=False,
             )
