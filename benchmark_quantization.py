@@ -248,3 +248,140 @@ def run_one_case(llm, case: Dict[str, Any]) -> Dict[str, Any]:
         "predicted_action": last_parsed["action"],
         "latency_ms":       median_ms,
     }
+
+
+def run_model(variant: Dict[str, Any], subset: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Load one GGUF variant, run all test cases, return raw results."""
+    from llama_cpp import Llama
+
+    path = variant["path"]
+    if not Path(path).exists():
+        print(f"  SKIP — file not found: {path}")
+        return []
+
+    print(f"\n{'='*60}")
+    print(f"  Model: {variant['name']}  ({path})")
+    print(f"{'='*60}")
+
+    llm = Llama(model_path=path, n_ctx=N_CTX, n_threads=N_THREADS, verbose=False)
+
+    cases = TEST_CASES
+    if subset:
+        cases = [c for c in TEST_CASES if c["type"] in subset]
+
+    results = []
+    for i, case in enumerate(cases, 1):
+        result = run_one_case(llm, case)
+        correct = "✓" if result["predicted_type"] == result["expected_type"] else "✗"
+        print(f"  [{i:02d}/{len(cases)}] {correct} {result['latency_ms']:>7.0f}ms  "
+              f"{result['expected_type']:<22} → {result['predicted_type']}")
+        results.append(result)
+
+    del llm
+    return results
+
+
+def download_missing_models(variants: List[Dict[str, Any]]) -> None:
+    """Download GGUF files that don't exist locally, skip if already present."""
+    for v in variants:
+        if Path(v["path"]).exists():
+            print(f"  Already exists: {v['path']}")
+            continue
+        if not v["url"]:
+            print(f"  No URL for {v['name']} — skipping")
+            continue
+        print(f"\nDownloading {v['name']} (~{v['size_gb']} GB) ...")
+        Path(v["path"]).parent.mkdir(parents=True, exist_ok=True)
+        ret = subprocess.run(
+            ["wget", "-q", "--show-progress", "-O", v["path"], v["url"]],
+            check=False,
+        )
+        if ret.returncode != 0:
+            print(f"  ERROR: download failed for {v['name']}")
+            Path(v["path"]).unlink(missing_ok=True)
+
+
+_TABLE_HEADER = (
+    "| Model        | Type Acc | Cmd Acc | Avg (ms) | P95 (ms) | Size (GB) |\n"
+    "|--------------|----------|---------|----------|----------|-----------|"
+)
+
+
+def print_table(all_metrics: List[Tuple[str, Dict[str, float], float]]) -> None:
+    """Print aligned comparison table to stdout."""
+    print(f"\n{_TABLE_HEADER}")
+    for name, metrics, size_gb in all_metrics:
+        print(format_row(name, metrics, size_gb))
+
+
+def save_outputs(all_metrics: List[Tuple[str, Dict[str, float], float]],
+                 all_raw: List[Tuple[str, List[Dict[str, Any]]]]) -> None:
+    """Write benchmark_results.csv and benchmark_results.md."""
+    with open("benchmark_results.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["model", "type_acc", "cmd_acc",
+                                                "avg_ms", "p95_ms", "size_gb"])
+        writer.writeheader()
+        for name, metrics, size_gb in all_metrics:
+            writer.writerow({
+                "model":    name,
+                "type_acc": round(metrics["type_acc"], 4),
+                "cmd_acc":  round(metrics["cmd_acc"], 4),
+                "avg_ms":   round(metrics["avg_ms"], 1),
+                "p95_ms":   round(metrics["p95_ms"], 1),
+                "size_gb":  size_gb,
+            })
+    print("\nSaved: benchmark_results.csv")
+
+    with open("benchmark_results.md", "w") as f:
+        f.write("# Nova LLM Quantization Benchmark\n\n")
+        f.write(_TABLE_HEADER + "\n")
+        for name, metrics, size_gb in all_metrics:
+            f.write(format_row(name, metrics, size_gb) + "\n")
+        f.write("\n_Metrics: Type Acc = correct intent type / 20 cases; "
+                "Cmd Acc = correct device+action / 5 direct_command cases; "
+                f"Avg/P95 latency in ms ({REPETITIONS} runs median per case)._\n")
+    print("Saved: benchmark_results.md")
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Nova LLM quantization benchmark")
+    parser.add_argument("--download", action="store_true",
+                        help="Download missing GGUF variants before benchmarking")
+    parser.add_argument("--models", type=str, default=None,
+                        help="Comma-separated model names to test, e.g. 1.5B-Q4_K_M,3B-Q4_K_M")
+    args = parser.parse_args()
+
+    variants = MODEL_VARIANTS
+    if args.models:
+        names = {n.strip() for n in args.models.split(",")}
+        variants = [v for v in MODEL_VARIANTS if v["name"] in names]
+        if not variants:
+            print(f"No matching models found. Available: {[v['name'] for v in MODEL_VARIANTS]}")
+            sys.exit(1)
+
+    if args.download:
+        print("==> Checking / downloading missing models ...")
+        download_missing_models(variants)
+
+    all_metrics = []
+    all_raw = []
+    for v in variants:
+        raw = run_model(v)
+        if not raw:
+            continue
+        metrics = evaluate(raw)
+        all_metrics.append((v["name"], metrics, v["size_gb"]))
+        all_raw.append((v["name"], raw))
+
+    if not all_metrics:
+        print("\nNo models were benchmarked. Use --download to fetch missing variants.")
+        sys.exit(1)
+
+    print_table(all_metrics)
+    save_outputs(all_metrics, all_raw)
+
+
+if __name__ == "__main__":
+    main()
