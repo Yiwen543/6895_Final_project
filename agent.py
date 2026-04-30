@@ -49,6 +49,7 @@ class NovaAgent:
             "original_text":         None,
             "question":              None,
             "options":               None,
+            "followup_retries":      0,
         }
 
     def reset_dialogue(self):
@@ -83,6 +84,12 @@ class NovaAgent:
         text = text.strip()
         if verbose:
             print("STT text:", text)
+
+        if self._state["pending_clarification"] and contains_assistant_name(text):
+            if verbose:
+                print("[State] Nova re-invoked; abandoning prior clarification.")
+            self.reset_dialogue()
+            return self._handle_new_request(text, verbose)
 
         if self._state["pending_clarification"]:
             return self._handle_followup(text, verbose)
@@ -122,6 +129,15 @@ class NovaAgent:
             self._memory.push_working("nova", reply)
             self.reset_dialogue()
             return self._result(True, semantic, False, reason, "SKIPPED", reply, round(ms, 3))
+
+        self._state["followup_retries"] = self._state.get("followup_retries", 0) + 1
+        if self._state["followup_retries"] >= 2:
+            reply = "Let's start over. What would you like me to do?"
+            self._speak(reply)
+            self._memory.push_working("nova", reply)
+            self.reset_dialogue()
+            return self._result(True, {"type": "invalid"}, False,
+                                "clarification_max_retries", "SKIPPED", reply, round(ms, 3))
 
         reply = "Sorry, I didn't catch your choice. Please answer again."
         self._speak(reply)

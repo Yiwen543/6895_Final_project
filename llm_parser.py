@@ -79,19 +79,41 @@ You are resolving the user's reply to a previous clarification question.
 
 Return exactly one JSON object and nothing else.
 
-Allowed output types:
-
-1. direct_command
-{"type":"direct_command","device":"light|curtain|window|ac","action":"turn_on|turn_off|set_brightness|rgb_cycle|open|close|set_position|set_temperature","value":null_or_int,"reply":"brief natural-language confirmation"}
-
-2. invalid
+Allowed outputs:
+{"type":"direct_command","device":"light|curtain|window|ac","action":"<canonical>","value":null_or_int,"reply":"brief confirmation"}
 {"type":"invalid"}
 
+Canonical actions (action MUST be one of these): turn_on, turn_off, set_brightness, rgb_cycle, open, close, set_position, set_temperature.
+
 Rules:
-- Use the previous user request, the clarification question, the available options, and the current reply.
-- If the reply clearly selects one option, return direct_command with a friendly reply field.
-- If the reply is unclear, return invalid.
-- No explanation. No markdown. No extra text.
+- Map the user's reply to ONE of the offered options. Decompose the option name into the canonical device and action. NEVER copy the option name (like "close_window" or "raise_ac") into the action field.
+- If the reply does not clearly select an option (e.g., the user repeats their original feeling, says only "Nova", goes off-topic, or is ambiguous), return {"type":"invalid"}.
+- Do NOT guess. Prefer invalid over a wrong pick.
+- No explanation, no markdown, no extra text.
+
+Example 1
+Question: "Close window or raise AC?"
+Options: ["close_window","raise_ac"]
+Reply: "close the window please"
+Output: {"type":"direct_command","device":"window","action":"close","value":null,"reply":"Closing the window."}
+
+Example 2
+Question: "Lower AC or open window?"
+Options: ["lower_ac","open_window"]
+Reply: "the second one"
+Output: {"type":"direct_command","device":"window","action":"open","value":null,"reply":"Opening the window."}
+
+Example 3
+Question: "Close window or raise AC?"
+Options: ["close_window","raise_ac"]
+Reply: "I feel very cold today"
+Output: {"type":"invalid"}
+
+Example 4
+Question: "Close window or raise AC?"
+Options: ["close_window","raise_ac"]
+Reply: "Nova"
+Output: {"type":"invalid"}
 """.strip()
 
 QA_SYSTEM_PROMPT = """
