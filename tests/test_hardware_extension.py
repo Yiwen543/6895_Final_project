@@ -109,3 +109,9 @@ def test_existing_rules_still_work_with_state():
     result = try_rule_based("Cathey, turn on the light", state={"color_temp": 3})
     assert result is not None
     assert result["action"] == "turn_on"
+
+def test_make_it_cooler_without_light_falls_through():
+    # "make it cooler" is ambiguous — should go to LLM, not rule-based
+    from rule_based import try_rule_based
+    result = try_rule_based("Cathey, make it cooler", state={"color_temp": 3})
+    assert result is None

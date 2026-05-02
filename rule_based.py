@@ -9,7 +9,10 @@ def try_rule_based(text: str, state: Dict[str, Any] = None) -> Optional[Dict[str
     _warmer = re.search(r'\b(?:warmer|cozier|more\s+warm)\b', t)
     _cooler = re.search(r'\b(?:cooler|colder|more\s+coo?l|more\s+cold)\b', t)
     if _warmer or _cooler:
-        if re.search(r'\blight\b', t) or re.search(r'\bmake\s+it\b', t):
+        has_light   = re.search(r'\blight\b', t)
+        has_make_it = re.search(r'\bmake\s+it\b', t)
+        # "make it cooler" is ambiguous (could mean AC) — require "light" for cooling
+        if has_light or (_warmer and has_make_it):
             delta   = 1 if _warmer else -1
             current = (state or {}).get("color_temp", 3)
             new_val = max(1, min(5, current + delta))
