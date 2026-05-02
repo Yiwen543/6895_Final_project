@@ -40,7 +40,7 @@ Outputs:
 {"type":"general_qa","answer":"..."}
 {"type":"invalid"}
 
-set_color_temp value: integer 1-5 only. 1=warmest(2700K), 2=warm, 3=neutral, 4=reading, 5=coolest(6500K).
+set_color_temp value: integer 1-5 only. 1=coldest/daylight(6500K), 2=reading(5000K), 3=neutral(4000K), 4=warm(3000K), 5=warmest/candlelight(2700K).
 
 Classification rules:
 - direct_command: ONLY when the user EXPLICITLY says a device name (light, curtain, window, ac) AND an action verb (turn on/off, open, close, set, dim, etc.).
@@ -75,17 +75,29 @@ Output: {"type":"needs_clarification","question":"Would you like me to lower the
 Input: Cathey, it's way too bright in here.
 Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
 
+Input: Cathey, open the curtain a little.
+Output: {"type":"direct_command","device":"curtain","action":"set_position","value":20,"reply":"Opening the curtain a little."}
+
+Input: Cathey, open the curtain halfway.
+Output: {"type":"direct_command","device":"curtain","action":"set_position","value":50,"reply":"Opening the curtain halfway."}
+
+Input: Cathey, open the curtain most of the way.
+Output: {"type":"direct_command","device":"curtain","action":"set_position","value":80,"reply":"Opening the curtain most of the way."}
+
 Input: Cathey, make the light warmer.
-Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":2,"reply":"Setting warm light."}
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":4,"reply":"Setting warm light."}
 
 Input: Cathey, make the light cozier.
-Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":1,"reply":"Setting cozy warm light."}
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":5,"reply":"Setting cozy warm light."}
+
+Input: Cathey, make the light colder.
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":1,"reply":"Setting cold daylight."}
 
 Input: Cathey, reading light please.
-Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":5,"reply":"Setting cool reading light."}
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":2,"reply":"Setting reading light."}
 
 Input: Cathey, I'm going to read, can you fix the light?
-Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":5,"reply":"Setting cool reading light."}
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":2,"reply":"Setting reading light."}
 
 Input: Cathey, how do I eat an apple?
 Output: {"type":"general_qa","answer":"Wash it first, then eat it."}
