@@ -84,6 +84,8 @@ class NovaAgent:
             return f"Sure, setting brightness to {value} percent."
         if action == "rgb_cycle":
             return "Sure, starting RGB cycle."
+        if action == "party_mode":
+            return "Party time! Let's go!"
         if action == "open":
             return f"Sure, opening the {device}."
         if action == "close":
@@ -103,7 +105,7 @@ class NovaAgent:
 
         if self._state["pending_clarification"] and contains_assistant_name(text):
             if verbose:
-                print("[State] Nova re-invoked; abandoning prior clarification.")
+                print("[State] Cathey re-invoked; abandoning prior clarification.")
             self.reset_dialogue()
             return self._handle_new_request(text, verbose)
 

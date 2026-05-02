@@ -76,7 +76,7 @@ class STTModel:
         return " ".join(s.text.strip() for s in segs).strip()
 
     def transcribe_file(self, path: str) -> str:
-        segs, _ = self._model.transcribe(path, beam_size=1, initial_prompt="Nova,")
+        segs, _ = self._model.transcribe(path, beam_size=1, initial_prompt="Cathey,")
         return " ".join(s.text.strip() for s in segs).strip()
 
 
