@@ -68,3 +68,44 @@ def test_get_device_state_updates_after_command():
          mock.patch.object(g, '_stop_rgb_cycle'):
         g.execute({"device": "light", "action": "set_color_temp", "value": 4})
     assert g.get_device_state()["color_temp"] == 4
+
+def test_warmer_increments_color_temp():
+    from rule_based import try_rule_based
+    result = try_rule_based("Cathey, make the light warmer", state={"color_temp": 3})
+    assert result is not None
+    assert result["action"] == "set_color_temp"
+    assert result["value"] == 4
+
+def test_cooler_decrements_color_temp():
+    from rule_based import try_rule_based
+    result = try_rule_based("Cathey, make the light cooler", state={"color_temp": 3})
+    assert result is not None
+    assert result["action"] == "set_color_temp"
+    assert result["value"] == 2
+
+def test_cozier_increments_color_temp():
+    from rule_based import try_rule_based
+    result = try_rule_based("Cathey, make it cozier", state={"color_temp": 2})
+    assert result is not None
+    assert result["value"] == 3
+
+def test_color_temp_clamps_at_max():
+    from rule_based import try_rule_based
+    result = try_rule_based("Cathey, make the light warmer", state={"color_temp": 5})
+    assert result["value"] == 5
+
+def test_color_temp_clamps_at_min():
+    from rule_based import try_rule_based
+    result = try_rule_based("Cathey, make the light colder", state={"color_temp": 1})
+    assert result["value"] == 1
+
+def test_relative_defaults_to_neutral_without_state():
+    from rule_based import try_rule_based
+    result = try_rule_based("Cathey, make the light warmer", state=None)
+    assert result["value"] == 4  # 3 + 1
+
+def test_existing_rules_still_work_with_state():
+    from rule_based import try_rule_based
+    result = try_rule_based("Cathey, turn on the light", state={"color_temp": 3})
+    assert result is not None
+    assert result["action"] == "turn_on"

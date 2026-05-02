@@ -2,8 +2,19 @@ import re
 from typing import Optional, Dict, Any
 
 
-def try_rule_based(text: str) -> Optional[Dict[str, Any]]:
+def try_rule_based(text: str, state: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
     t = text.lower()
+
+    # Relative color temperature: "warmer/cozier" → +1, "cooler/colder" → -1
+    _warmer = re.search(r'\b(?:warmer|cozier|more\s+warm)\b', t)
+    _cooler = re.search(r'\b(?:cooler|colder|more\s+coo?l|more\s+cold)\b', t)
+    if _warmer or _cooler:
+        if re.search(r'\blight\b', t) or re.search(r'\bmake\s+it\b', t):
+            delta   = 1 if _warmer else -1
+            current = (state or {}).get("color_temp", 3)
+            new_val = max(1, min(5, current + delta))
+            return {"type": "direct_command", "device": "light",
+                    "action": "set_color_temp", "value": new_val}
 
     # AC temperature: "set the AC to 24 degrees" or "set 24 degrees on AC"
     m = re.search(r"(?:ac|air.?con).*?(\d+)\s*degree|(\d+)\s*degree.*?(?:ac|air.?con)", t)
