@@ -2,6 +2,7 @@ import lgpio
 import time
 import threading
 import colorsys
+from config import WINDOW_PINS, WINDOW_TOTAL_STEPS
 
 try:
     from pi5neo import Pi5Neo
@@ -24,6 +25,7 @@ FAN_TACH_PIN = 16         # GPIO 16 / Pin 36 (optional tachometer input)
 MOTOR_PINS          = [5, 6, 13, 26]   # ULN2003 IN1-IN4 → Pins 29,31,33,37
 CURTAIN_TOTAL_STEPS = 2048
 STEP_DELAY          = 0.002
+WINDOW_STEP_DELAY   = 0.002
 
 # ── RGB cycle parameters ──────────────────────────────────────────────────────
 RGB_HUE_STEP   = 0.01
@@ -32,11 +34,11 @@ RGB_CYCLE_TICK = 0.1
 
 # Color temperature lookup: level 1-5 → (R, G, B)
 _COLOR_TEMP_RGB = {
-    1: (255, 147,  41),   # 2700K — candlelight / sleep
-    2: (255, 197, 143),   # 3000K — warm white / relax
+    1: (255, 255, 255),   # 6500K — daylight / cold white
+    2: (255, 255, 230),   # 5000K — reading / cool white
     3: (255, 255, 200),   # 4000K — neutral / daily
-    4: (255, 255, 230),   # 5000K — cool white / reading
-    5: (255, 255, 255),   # 6500K — daylight / focus
+    4: (255, 197, 143),   # 3000K — warm white / relax
+    5: (255, 147,  41),   # 2700K — candlelight / warm
 }
 
 
@@ -67,6 +69,17 @@ class GPIOExecutor:
         self._step_index  = 0
         self._curtain_pos = 0
         self._release_motor()
+
+        # ── Window stepper motor ──────────────────────────────────────────────
+        for pin in WINDOW_PINS:
+            lgpio.gpio_claim_output(self._h, pin)
+        self._window_step_index = 0
+        self._window_pos = 0
+        self._release_window_motor()
+
+        # ── Device state ──────────────────────────────────────────────────────
+        self._color_temp_level = 3
+        self._brightness_level = 100
 
         # ── Fan (PWM) ─────────────────────────────────────────────────────────
         lgpio.gpio_claim_output(self._h, FAN_PIN)
@@ -152,6 +165,33 @@ class GPIOExecutor:
         for pin in MOTOR_PINS:
             lgpio.gpio_write(self._h, pin, 0)
 
+    def _do_window_step(self, direction: int) -> None:
+        self._window_step_index = (self._window_step_index + direction) % 8
+        for i, pin in enumerate(WINDOW_PINS):
+            lgpio.gpio_write(self._h, pin, self.HALF_STEP_SEQ[self._window_step_index][i])
+        time.sleep(WINDOW_STEP_DELAY)
+
+    def _release_window_motor(self) -> None:
+        for pin in WINDOW_PINS:
+            lgpio.gpio_write(self._h, pin, 0)
+
+    def _move_window(self, target_pct: int) -> None:
+        target_pct = 0 if target_pct <= 50 else 100
+        steps     = int((target_pct - self._window_pos) / 100 * WINDOW_TOTAL_STEPS)
+        direction = 1 if steps >= 0 else -1
+        for _ in range(abs(steps)):
+            self._do_window_step(direction)
+        self._window_pos = target_pct
+        self._release_window_motor()
+
+    def get_device_state(self) -> dict:
+        return {
+            "color_temp": self._color_temp_level,
+            "brightness": self._brightness_level,
+            "curtain_pos": self._curtain_pos,
+            "window_pos": self._window_pos,
+        }
+
     def _move_to_position(self, target_pct: int) -> None:
         target_pct = max(0, min(100, target_pct))
         steps     = int((target_pct - self._curtain_pos) / 100 * CURTAIN_TOTAL_STEPS)
@@ -179,14 +219,16 @@ class GPIOExecutor:
                 return "LIGHT -> OFF"
             if action == "set_brightness":
                 self._stop_rgb_cycle()
-                self._fill_brightness(int(value))
+                self._brightness_level = int(value)
+                self._fill_brightness(self._brightness_level)
                 return f"LIGHT -> BRIGHTNESS {value}%"
             if action == "rgb_cycle":
                 self._start_rgb_cycle()
                 return "LIGHT -> RGB CYCLE"
             if action == "set_color_temp":
                 self._stop_rgb_cycle()
-                r, g, b = _COLOR_TEMP_RGB.get(int(value), (255, 255, 255))
+                self._color_temp_level = int(value)
+                r, g, b = _COLOR_TEMP_RGB.get(self._color_temp_level, (255, 255, 255))
                 self._fill(r, g, b)
                 return f"LIGHT -> COLOR TEMP {value}"
 
@@ -200,6 +242,14 @@ class GPIOExecutor:
             if action == "set_position":
                 self._move_to_position(int(value))
                 return f"CURTAIN -> POSITION {value}%"
+
+        if device == "window":
+            if action == "open":
+                self._move_window(100)
+                return "WINDOW -> OPEN"
+            if action == "close":
+                self._move_window(0)
+                return "WINDOW -> CLOSE"
 
         if device == "ac":
             if action == "turn_on":
@@ -221,4 +271,5 @@ class GPIOExecutor:
         self._set_fan(0.0)
         lgpio.tx_pwm(self._h, FAN_PIN, FAN_FREQ_HZ, 0)
         self._release_motor()
+        self._release_window_motor()
         lgpio.gpiochip_close(self._h)

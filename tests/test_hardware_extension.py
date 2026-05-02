@@ -11,3 +11,60 @@ def test_window_total_steps_in_config():
     import config
     assert hasattr(config, "WINDOW_TOTAL_STEPS")
     assert config.WINDOW_TOTAL_STEPS > 0
+
+def test_get_device_state_mock():
+    """Test get_device_state without real hardware by monkey-patching lgpio."""
+    import types, unittest.mock as mock
+    import sys
+
+    # Provide a fake lgpio so gpio_executor can be imported on non-Pi
+    fake_lgpio = types.ModuleType("lgpio")
+    fake_lgpio.gpiochip_open = mock.Mock(return_value=0)
+    fake_lgpio.gpio_claim_output = mock.Mock()
+    fake_lgpio.gpio_write = mock.Mock()
+    fake_lgpio.tx_pwm = mock.Mock()
+    fake_lgpio.gpiochip_close = mock.Mock()
+    sys.modules["lgpio"] = fake_lgpio
+
+    # Also stub pi5neo so LED init doesn't fail
+    fake_pi5neo_mod = types.ModuleType("pi5neo")
+    fake_pi5neo_mod.Pi5Neo = mock.Mock()
+    sys.modules["pi5neo"] = fake_pi5neo_mod
+
+    # Remove cached gpio_executor so it re-imports with our mocks
+    if "gpio_executor" in sys.modules:
+        del sys.modules["gpio_executor"]
+
+    from gpio_executor import GPIOExecutor
+    g = GPIOExecutor()
+
+    state = g.get_device_state()
+    assert state["color_temp"] == 3
+    assert state["brightness"] == 100
+    assert state["curtain_pos"] == 0
+    assert state["window_pos"] == 0
+
+def test_get_device_state_updates_after_command():
+    import sys
+    from gpio_executor import GPIOExecutor
+    import unittest.mock as mock
+
+    g = GPIOExecutor.__new__(GPIOExecutor)
+    g._color_temp_level = 3
+    g._brightness_level = 100
+    g._curtain_pos = 0
+    g._window_pos = 0
+    g._strip = None
+    g._rgb_stop = mock.Mock()
+    g._rgb_lock = mock.MagicMock()
+    g._rgb_thread = None
+    g._fan_duty = 0.0
+    g._step_index = 0
+    g._window_step_index = 0
+    g._h = 0
+
+    # Simulate set_color_temp updating state
+    with mock.patch.object(g, '_fill'), \
+         mock.patch.object(g, '_stop_rgb_cycle'):
+        g.execute({"device": "light", "action": "set_color_temp", "value": 4})
+    assert g.get_device_state()["color_temp"] == 4
