@@ -33,6 +33,8 @@ RGB_CYCLE_TICK = 0.1
 
 
 # Color temperature lookup: level 1-5 → (R, G, B)
+# Scale: 1=coldest(6500K/daylight) … 5=warmest(2700K/candlelight)
+# Direction matches LLM intuition: small number = cold, large = warm.
 _COLOR_TEMP_RGB = {
     1: (255, 255, 255),   # 6500K — daylight / cold white
     2: (255, 255, 230),   # 5000K — reading / cool white
@@ -250,6 +252,9 @@ class GPIOExecutor:
             if action == "close":
                 self._move_window(0)
                 return "WINDOW -> CLOSE"
+            if action == "set_position":
+                self._move_window(int(value))
+                return f"WINDOW -> POSITION {value}%"
 
         if device == "ac":
             if action == "turn_on":
