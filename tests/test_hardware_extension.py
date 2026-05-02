@@ -115,3 +115,43 @@ def test_make_it_cooler_without_light_falls_through():
     from rule_based import try_rule_based
     result = try_rule_based("Cathey, make it cooler", state={"color_temp": 3})
     assert result is None
+
+def test_agent_passes_state_to_rule_based():
+    import unittest.mock as mock
+    import sys, types
+
+    # Stub lgpio + pi5neo for import if not already stubbed
+    for mod in ("lgpio", "pi5neo"):
+        if mod not in sys.modules:
+            fake = types.ModuleType(mod)
+            if mod == "lgpio":
+                for fn in ("gpiochip_open","gpio_claim_output","gpio_write","tx_pwm","gpiochip_close"):
+                    setattr(fake, fn, mock.Mock(return_value=0))
+            else:
+                fake.Pi5Neo = mock.Mock()
+            sys.modules[mod] = fake
+
+    # Fresh import of agent
+    if "agent" in sys.modules:
+        del sys.modules["agent"]
+    from agent import NovaAgent
+    from gpio_executor import GPIOExecutor
+
+    gpio = GPIOExecutor.__new__(GPIOExecutor)
+    gpio._color_temp_level = 4
+    gpio._brightness_level = 80
+    gpio._curtain_pos = 0
+    gpio._window_pos = 0
+
+    llm_mock = mock.Mock()
+    llm_mock.parse_unified = mock.Mock(return_value=({"type": "invalid"}, None, 0.0))
+    agent = NovaAgent(llm=llm_mock, memory=mock.Mock(), speak=mock.Mock(), gpio=gpio)
+
+    with mock.patch("agent.try_rule_based", return_value=None) as mock_rb:
+        agent.handle("Cathey, make the light warmer", verbose=False)
+        assert mock_rb.called
+        call_args = mock_rb.call_args[0]  # positional args tuple
+        assert len(call_args) == 2, "try_rule_based should be called with (text, state)"
+        passed_state = call_args[1]
+        assert passed_state is not None
+        assert passed_state["color_temp"] == 4

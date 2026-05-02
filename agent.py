@@ -175,7 +175,7 @@ class NovaAgent:
         self._memory.push_working("user", text)
 
         # Rule-based fast path: skip LLM for unambiguous direct commands
-        fast = try_rule_based(text)
+        fast = try_rule_based(text, self._gpio.get_device_state() if self._gpio else None)
         if fast is not None:
             fast["reply"] = self._rule_reply(fast)
             return self._do_direct_command(fast, text, 0.0)
@@ -238,7 +238,17 @@ class NovaAgent:
             if ok:
                 action_label = f"{cmd['device']} {cmd['action']}".replace("_", " ")
                 reply = f"Sure, {action_label}. (based on your past preference)"
-                self._speak(reply)
+                hw_result = execute_command(cmd)
+                gpio_thread = threading.Thread(
+                    target=self._gpio.execute, args=(cmd,), daemon=True
+                ) if self._gpio else None
+                tts_thread = threading.Thread(target=self._speak, args=(reply,), daemon=True)
+                if gpio_thread:
+                    gpio_thread.start()
+                tts_thread.start()
+                if gpio_thread:
+                    gpio_thread.join()
+                tts_thread.join()
                 self._memory.record_skill(text, cmd)
                 self._update_pref(cmd)
                 self._memory.save_episode(text, "needs_clarification_auto", reply)
@@ -246,7 +256,7 @@ class NovaAgent:
                 if verbose:
                     print(f"[Procedural Memory] Auto-resolved: {cmd}")
                 return self._result(True, semantic, True, "procedural_memory_auto_resolved",
-                                    execute_command(cmd), reply, round(ms, 3))
+                                    hw_result, reply, round(ms, 3))
 
         # No known preference — ask for clarification
         self._state.update({
