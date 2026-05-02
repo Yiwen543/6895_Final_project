@@ -35,7 +35,8 @@ PIPER_MODEL_PATH = "voices/en_US-lessac-medium.onnx"
 ASSISTANT_NAME = "cathey"
 ASSISTANT_NAME_VARIANTS = [
     "cathey", "cathy", "kathy", "katie", "cathie",
-    "cafe", "kaffee", "cate", "catty", "catty",
+    "cafe", "kaffee", "cate", "catty",
+    "cassie", "kasey",
 ]
 
 # ── Audio capture ─────────────────────────────────────────────────────────────
@@ -60,6 +61,10 @@ MEMORY_DIR          = "nova_memory"
 WORKING_MAXLEN      = 8
 SKILL_SIM_THRESHOLD = 0.92   # procedural memory cosine similarity cutoff
 EPISODE_DIST_CUTOFF = 0.6    # episodic RAG: keep episodes with distance < this
+
+# ── GPIO hardware ─────────────────────────────────────────────────────────────
+WINDOW_PINS        = [17, 27, 22, 23]   # ULN2003 IN1-IN4 → Pi Pins 11,13,15,16
+WINDOW_TOTAL_STEPS = 2048               # calibrate to physical window mechanism
 
 # ── LoRA fine-tuning ──────────────────────────────────────────────────────────
 LORA_R           = 8
