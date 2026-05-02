@@ -21,6 +21,7 @@ COMMAND_SCHEMA: Dict[str, Any] = {
             "turn_off":       None,
             "set_brightness": (0, 100),
             "rgb_cycle":      None,
+            "set_color_temp": (1, 5),
         }
     },
     "curtain": {
@@ -55,6 +56,7 @@ _EXEC_TABLE: Dict[Tuple[str, str], str] = {
     ("light",   "turn_off"):         "LIGHT -> OFF",
     ("light",   "set_brightness"):   "LIGHT -> BRIGHTNESS {value}%",
     ("light",   "rgb_cycle"):        "LIGHT -> RGB CYCLE",
+    ("light",   "set_color_temp"):  "LIGHT -> COLOR TEMP {value}",
     ("curtain", "open"):             "CURTAIN -> OPEN",
     ("curtain", "close"):            "CURTAIN -> CLOSE",
     ("curtain", "set_position"):     "CURTAIN -> POSITION {value}%",

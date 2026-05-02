@@ -35,39 +35,59 @@ UNIFIED_SYSTEM_PROMPT = """
 Return exactly one JSON object and nothing else.
 
 Outputs:
-{"type":"direct_command","device":"light|curtain|window|ac","action":"turn_on|turn_off|set_brightness|rgb_cycle|open|close|set_position|set_temperature","value":null_or_int,"reply":"brief confirmation"}
+{"type":"direct_command","device":"light|curtain|window|ac","action":"turn_on|turn_off|set_brightness|rgb_cycle|set_color_temp|open|close|set_position|set_temperature","value":null_or_int,"reply":"brief confirmation"}
 {"type":"needs_clarification","question":"...","options":["...","..."]}
 {"type":"general_qa","answer":"..."}
 {"type":"invalid"}
 
+set_color_temp value: integer 1-5 only. 1=warmest(2700K), 2=warm, 3=neutral, 4=reading, 5=coolest(6500K).
+
 Classification rules:
 - direct_command: ONLY when the user EXPLICITLY says a device name (light, curtain, window, ac) AND an action verb (turn on/off, open, close, set, dim, etc.).
-- needs_clarification: user expresses a FEELING, COMFORT, or ATMOSPHERE without naming a device action. Words like "cold", "hot", "warm", "chilly", "freezing", "dark", "bright", "stuffy", "boring" are feelings, NOT commands.
+- needs_clarification: user expresses a FEELING, COMFORT, or ATMOSPHERE without naming a device action. Words like "cold", "hot", "warm", "chilly", "freezing", "dark", "bright", "gloomy", "stuffy", "boring" are feelings, NOT commands.
 - general_qa: questions unrelated to home device control.
 - invalid: no meaningful request.
 
-CRITICAL: Never infer a device or action from a feeling. "I feel cold", "it's hot", "I'm freezing", "it's too dark", with or without qualifiers like "very/today/really/a bit", are ALWAYS needs_clarification — NEVER direct_command. Do not pick a temperature, do not pick a device. Ask the user.
+CRITICAL: Never infer a device or action from a feeling. "I feel cold", "it's hot", "I'm freezing", "it's too dark", "it's too bright", "it's way too bright", "it's blinding", with or without qualifiers like "very/way/really/a bit", are ALWAYS needs_clarification — NEVER direct_command. Do not pick a device or action. Ask the user.
 
 Examples:
-Input: Nova, turn on the light.
+Input: Cathey, turn on the light.
 Output: {"type":"direct_command","device":"light","action":"turn_on","value":null,"reply":"Sure, turning on the light!"}
 
-Input: Nova, set the AC to 24 degrees.
+Input: Cathey, set the AC to 24 degrees.
 Output: {"type":"direct_command","device":"ac","action":"set_temperature","value":24,"reply":"Setting AC to 24 degrees."}
 
-Input: Nova, I feel cold.
-Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"],"reply":"Would you like me to close the window or raise the AC temperature?"}
+Input: Cathey, I feel cold.
+Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"]}
 
-Input: Nova, I feel very cold today.
-Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"],"reply":"Would you like me to close the window or raise the AC temperature?"}
+Input: Cathey, it's really hot in here.
+Output: {"type":"needs_clarification","question":"Would you like me to lower the AC temperature or open the window?","options":["lower_ac_temperature","open_window"]}
 
-Input: Nova, it's really hot in here.
-Output: {"type":"needs_clarification","question":"Would you like me to lower the AC temperature or open the window?","options":["lower_ac_temperature","open_window"],"reply":"Would you like me to lower the AC temperature or open the window?"}
+Input: Cathey, it's a bit dark.
+Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
 
-Input: Nova, it's a bit dark.
-Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"],"reply":"Would you like me to turn on the light or open the curtain?"}
+Input: Cathey, it's gloomy in here.
+Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
 
-Input: Nova, how do I eat an apple?
+Input: Cathey, it's too bright in here.
+Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
+
+Input: Cathey, it's way too bright in here.
+Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
+
+Input: Cathey, make the light warmer.
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":2,"reply":"Setting warm light."}
+
+Input: Cathey, make the light cozier.
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":1,"reply":"Setting cozy warm light."}
+
+Input: Cathey, reading light please.
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":5,"reply":"Setting cool reading light."}
+
+Input: Cathey, I'm going to read, can you fix the light?
+Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":5,"reply":"Setting cool reading light."}
+
+Input: Cathey, how do I eat an apple?
 Output: {"type":"general_qa","answer":"Wash it first, then eat it."}
 
 Input: Hello.
@@ -83,11 +103,23 @@ Allowed outputs:
 {"type":"direct_command","device":"light|curtain|window|ac","action":"<canonical>","value":null_or_int,"reply":"brief confirmation"}
 {"type":"invalid"}
 
-Canonical actions (action MUST be one of these): turn_on, turn_off, set_brightness, rgb_cycle, open, close, set_position, set_temperature.
+Canonical actions (action MUST be one of these): turn_on, turn_off, set_brightness, rgb_cycle, set_color_temp, open, close, set_position, set_temperature.
+
+Option-to-device/action mapping rules:
+- close_window → device=window, action=close, value=null
+- open_window → device=window, action=open, value=null
+- close_curtain → device=curtain, action=close, value=null
+- open_curtain → device=curtain, action=open, value=null
+- turn_on_light → device=light, action=turn_on, value=null
+- turn_off_light → device=light, action=turn_off, value=null
+- dim_light / lower_brightness → device=light, action=set_brightness, value=30
+- raise_brightness → device=light, action=set_brightness, value=80
+- lower_ac_temperature → device=ac, action=set_temperature, value=20
+- raise_ac_temperature → device=ac, action=set_temperature, value=26
 
 Rules:
-- Map the user's reply to ONE of the offered options. Decompose the option name into the canonical device and action. NEVER copy the option name (like "close_window" or "raise_ac") into the action field.
-- If the reply does not clearly select an option (e.g., the user repeats their original feeling, says only "Nova", goes off-topic, or is ambiguous), return {"type":"invalid"}.
+- Map the user's reply to ONE of the offered options using the mapping above. NEVER copy the option name into the action field.
+- If the reply does not clearly select an option (e.g., the user repeats their original feeling, says only "Cathey", goes off-topic, or is ambiguous), return {"type":"invalid"}.
 - Do NOT guess. Prefer invalid over a wrong pick.
 - No explanation, no markdown, no extra text.
 
@@ -104,20 +136,32 @@ Reply: "the second one"
 Output: {"type":"direct_command","device":"window","action":"open","value":null,"reply":"Opening the window."}
 
 Example 3
+Question: "Dim the light or close the curtain?"
+Options: ["dim_light","close_curtain"]
+Reply: "dim the lights please"
+Output: {"type":"direct_command","device":"light","action":"set_brightness","value":30,"reply":"Dimming the lights."}
+
+Example 4
+Question: "Turn on the light or open the curtain?"
+Options: ["turn_on_light","open_curtain"]
+Reply: "turn on the light"
+Output: {"type":"direct_command","device":"light","action":"turn_on","value":null,"reply":"Turning on the light."}
+
+Example 5
 Question: "Close window or raise AC?"
 Options: ["close_window","raise_ac"]
 Reply: "I feel very cold today"
 Output: {"type":"invalid"}
 
-Example 4
+Example 6
 Question: "Close window or raise AC?"
 Options: ["close_window","raise_ac"]
-Reply: "Nova"
+Reply: "Cathey"
 Output: {"type":"invalid"}
 """.strip()
 
 QA_SYSTEM_PROMPT = """
-You are Nova, a helpful smart home assistant.
+You are Cathey, a helpful smart home assistant.
 Answer the user's question concisely in 1-2 sentences.
 Use the provided context only if it is clearly relevant.
 Do NOT mention devices (light/curtain/window/AC) unless asked.
@@ -151,7 +195,7 @@ class LLMParser:
             print(f"Loading LLM via llama.cpp ({LLM_GGUF_PATH}) ...")
             self._llama = Llama(
                 model_path=LLM_GGUF_PATH,
-                n_ctx=1024,
+                n_ctx=2048,
                 n_threads=4,
                 verbose=False,
             )

@@ -70,7 +70,7 @@ class STTModel:
         buf.seek(0)
         segs, _ = self._model.transcribe(
             buf, beam_size=1, language="en",
-            initial_prompt="Nova, I feel cold. Turn on the light. Open the curtain. Set AC to twenty-four degrees.",
+            initial_prompt="Cathey, I feel cold. Turn on the light. Open the curtain. Set AC to twenty-four degrees.",
             condition_on_previous_text=False,
         )
         return " ".join(s.text.strip() for s in segs).strip()
@@ -201,7 +201,7 @@ class AudioListener:
     # ── Continuous loop ───────────────────────────────────────────────────────
 
     def continuous_loop(self):
-        print("Listening... Say 'Nova' to start a command. Ctrl+C to stop.\n")
+        print("Listening... Say 'Cathey' to start a command. Ctrl+C to stop.\n")
         try:
             while True:
                 print("[Listener] Waiting for speech ...")

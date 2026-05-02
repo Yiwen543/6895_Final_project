@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nova Smart Home Assistant — Raspberry Pi 5 entry point."""
+"""Cathey Smart Home Assistant — Raspberry Pi 5 entry point."""
 
 import sys
 import logging
@@ -15,7 +15,7 @@ from config import EMBED_MODEL_NAME
 
 
 def main() -> None:
-    print("=== Nova starting up ===")
+    print("=== Cathey starting up ===")
 
     stt    = STTModel()
     tts    = TTSEngine()
@@ -28,14 +28,14 @@ def main() -> None:
 
     listener = AudioListener(agent=nova, stt=stt)
 
-    print("=== Nova ready. Listening... ===")
+    print("=== Cathey ready. Listening... ===")
     try:
         listener.continuous_loop()
     except KeyboardInterrupt:
         pass
     finally:
         gpio.cleanup()
-        print("Nova shut down.")
+        print("Cathey shut down.")
 
 
 if __name__ == "__main__":

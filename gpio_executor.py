@@ -3,20 +3,47 @@ import time
 import threading
 import colorsys
 
-# Signal pins (Pi 5 BCM numbering, verified against 40-pin header)
-# GPIO 17 and 19 are reserved by ReSpeaker 2-Mics HAT (button and I2S PCM_FS)
-DATA_PIN = 24   # Grove RGB LED DATA  → Pin 18
-CLK_PIN  = 27   # Grove RGB LED CLK   → Pin 13
-MOTOR_PINS = [5, 6, 13, 26]  # ULN2003 IN1-IN4 → Pins 29,31,33,37
+try:
+    from pi5neo import Pi5Neo
+    _HAS_PI5NEO = True
+except ImportError:
+    _HAS_PI5NEO = False
+    print("[GPIO] pi5neo not found — LED ring disabled (install: pip install pi5neo)")
 
-# ⚠️ VCC and GND for LED and motor board come from an external PSU.
-# The external PSU GND must share a common ground with a Pi GND pin
-# (e.g. Pin 6 or Pin 9) for GPIO signal levels to be valid.
+# ── WS2812B LED Ring (pi5neo via SPI0) ───────────────────────────────────────
+LED_SPI_DEV  = "/dev/spidev0.0"   # SPI0 MOSI = GPIO 10 / Pin 19
+LED_COUNT    = 12                  # 12-LED ring
+LED_FREQ     = 800                 # kHz
 
-CURTAIN_TOTAL_STEPS = 2048  # half-revolution; calibrate after first wiring test
-STEP_DELAY = 0.002          # 2 ms between half-steps
-RGB_HUE_STEP   = 0.01       # hue increment per cycle tick (100 ticks = full spectrum)
-RGB_CYCLE_TICK = 0.1        # seconds between cycle ticks
+# ── Fan / AC simulation ───────────────────────────────────────────────────────
+FAN_PIN      = 12         # GPIO 12 / Pin 32 (hardware PWM0)
+FAN_FREQ_HZ  = 1000       # 1 kHz — lgpio max is 10 kHz; most fans accept ≥100 Hz
+FAN_TACH_PIN = 16         # GPIO 16 / Pin 36 (optional tachometer input)
+
+# ── Stepper motor (curtain) ───────────────────────────────────────────────────
+MOTOR_PINS          = [5, 6, 13, 26]   # ULN2003 IN1-IN4 → Pins 29,31,33,37
+CURTAIN_TOTAL_STEPS = 2048
+STEP_DELAY          = 0.002
+
+# ── RGB cycle parameters ──────────────────────────────────────────────────────
+RGB_HUE_STEP   = 0.01
+RGB_CYCLE_TICK = 0.1
+
+
+# Color temperature lookup: level 1-5 → (R, G, B)
+_COLOR_TEMP_RGB = {
+    1: (255, 147,  41),   # 2700K — candlelight / sleep
+    2: (255, 197, 143),   # 3000K — warm white / relax
+    3: (255, 255, 200),   # 4000K — neutral / daily
+    4: (255, 255, 230),   # 5000K — cool white / reading
+    5: (255, 255, 255),   # 6500K — daylight / focus
+}
+
+
+def _temp_to_duty(temp: int) -> float:
+    """Linear map: 16 °C → 100 % speed, 30 °C → 10 % speed."""
+    duty = 100.0 - (temp - 16) / (30 - 16) * 90.0
+    return max(10.0, min(100.0, duty))
 
 
 class GPIOExecutor:
@@ -33,46 +60,53 @@ class GPIOExecutor:
 
     def __init__(self):
         self._h = lgpio.gpiochip_open(0)
-        lgpio.gpio_claim_output(self._h, DATA_PIN)
-        lgpio.gpio_claim_output(self._h, CLK_PIN)
+
+        # ── Stepper motor ─────────────────────────────────────────────────────
         for pin in MOTOR_PINS:
             lgpio.gpio_claim_output(self._h, pin)
-        self._step_index = 0
+        self._step_index  = 0
         self._curtain_pos = 0
-        self._rgb_stop = threading.Event()
-        self._rgb_thread = None
-        self._rgb_lock = threading.Lock()
-        self._set_color(0, 0, 0)
         self._release_motor()
 
-    def _send_bit(self, bit: int) -> None:
-        lgpio.gpio_write(self._h, DATA_PIN, bit)
-        lgpio.gpio_write(self._h, CLK_PIN, 1)
-        lgpio.gpio_write(self._h, CLK_PIN, 0)
+        # ── Fan (PWM) ─────────────────────────────────────────────────────────
+        lgpio.gpio_claim_output(self._h, FAN_PIN)
+        self._fan_duty = 0.0
+        lgpio.tx_pwm(self._h, FAN_PIN, FAN_FREQ_HZ, 0)   # start stopped
 
-    def _send_byte(self, byte: int) -> None:
-        for i in range(7, -1, -1):
-            self._send_bit((byte >> i) & 1)
+        # ── WS2812B LED ring (pi5neo via SPI0) ───────────────────────────────
+        self._strip = None
+        if _HAS_PI5NEO:
+            try:
+                self._strip = Pi5Neo(LED_SPI_DEV, LED_COUNT, LED_FREQ)
+                self._fill(0, 0, 0)
+                print("[GPIO] LED ring ready (pi5neo SPI0)")
+            except Exception as e:
+                print(f"[GPIO] LED ring init failed ({e}) — LED disabled")
+                self._strip = None
 
-    def _set_color(self, r: int, g: int, b: int) -> None:
-        for _ in range(32):
-            self._send_bit(0)
-        prefix = 0xC0
-        prefix |= ((~b) & 0xC0) >> 2
-        prefix |= ((~g) & 0xC0) >> 4
-        prefix |= ((~r) & 0xC0) >> 6
-        self._send_byte(prefix & 0xFF)
-        self._send_byte(b & 0xFF)
-        self._send_byte(g & 0xFF)
-        self._send_byte(r & 0xFF)
-        for _ in range(32):
-            self._send_bit(0)
+        self._rgb_stop   = threading.Event()
+        self._rgb_thread = None
+        self._rgb_lock   = threading.Lock()
+
+    # ── LED helpers ───────────────────────────────────────────────────────────
+
+    def _fill(self, r: int, g: int, b: int) -> None:
+        if self._strip is None:
+            return
+        self._strip.fill_strip(r, g, b)
+        self._strip.update_strip()
+
+    def _fill_brightness(self, pct: int) -> None:
+        v = int(round(255 * pct / 100))
+        self._fill(v, v, v)
 
     def _start_rgb_cycle(self) -> None:
         with self._rgb_lock:
             self._stop_rgb_cycle_unsafe()
             self._rgb_stop.clear()
-            self._rgb_thread = threading.Thread(target=self._rgb_cycle_loop, daemon=True)
+            self._rgb_thread = threading.Thread(
+                target=self._rgb_cycle_loop, daemon=True
+            )
             self._rgb_thread.start()
 
     def _stop_rgb_cycle(self) -> None:
@@ -85,12 +119,28 @@ class GPIOExecutor:
             self._rgb_thread.join(timeout=0.5)
 
     def _rgb_cycle_loop(self) -> None:
-        hue = 0.0
+        """Rotate a rainbow around the 12-LED ring."""
         while not self._rgb_stop.is_set():
-            r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
-            self._set_color(int(r * 255), int(g * 255), int(b * 255))
-            hue = (hue + RGB_HUE_STEP) % 1.0
-            time.sleep(RGB_CYCLE_TICK)
+            for offset in range(LED_COUNT):
+                if self._rgb_stop.is_set() or self._strip is None:
+                    break
+                for i in range(LED_COUNT):
+                    hue = ((i + offset) % LED_COUNT) / LED_COUNT
+                    r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+                    self._strip.set_led_color(
+                        i, int(r * 255), int(g * 255), int(b * 255)
+                    )
+                self._strip.update_strip()
+                time.sleep(RGB_CYCLE_TICK)
+
+    # ── Fan helpers ───────────────────────────────────────────────────────────
+
+    def _set_fan(self, duty: float) -> None:
+        duty = max(0.0, min(100.0, duty))
+        self._fan_duty = duty
+        lgpio.tx_pwm(self._h, FAN_PIN, FAN_FREQ_HZ, duty)
+
+    # ── Stepper motor helpers ─────────────────────────────────────────────────
 
     def _do_step(self, direction: int) -> None:
         self._step_index = (self._step_index + direction) % 8
@@ -104,51 +154,71 @@ class GPIOExecutor:
 
     def _move_to_position(self, target_pct: int) -> None:
         target_pct = max(0, min(100, target_pct))
-        steps = int((target_pct - self._curtain_pos) / 100 * CURTAIN_TOTAL_STEPS)
+        steps     = int((target_pct - self._curtain_pos) / 100 * CURTAIN_TOTAL_STEPS)
         direction = 1 if steps >= 0 else -1
         for _ in range(abs(steps)):
             self._do_step(direction)
         self._curtain_pos = target_pct
         self._release_motor()
 
+    # ── Main dispatch ─────────────────────────────────────────────────────────
+
     def execute(self, cmd: dict) -> str:
-        device = cmd.get('device')
-        action = cmd.get('action')
-        value  = cmd.get('value')
+        device = cmd.get("device")
+        action = cmd.get("action")
+        value  = cmd.get("value")
 
-        if device == 'light':
-            if action == 'turn_on':
+        if device == "light":
+            if action == "turn_on":
                 self._stop_rgb_cycle()
-                self._set_color(255, 255, 255)
-                return 'LIGHT -> ON'
-            if action == 'turn_off':
+                self._fill(255, 255, 255)
+                return "LIGHT -> ON"
+            if action == "turn_off":
                 self._stop_rgb_cycle()
-                self._set_color(0, 0, 0)
-                return 'LIGHT -> OFF'
-            if action == 'set_brightness':
+                self._fill(0, 0, 0)
+                return "LIGHT -> OFF"
+            if action == "set_brightness":
                 self._stop_rgb_cycle()
-                v = int(round(255 / 100 * value))
-                self._set_color(v, v, v)
-                return f'LIGHT -> BRIGHTNESS {value}%'
-            if action == 'rgb_cycle':
+                self._fill_brightness(int(value))
+                return f"LIGHT -> BRIGHTNESS {value}%"
+            if action == "rgb_cycle":
                 self._start_rgb_cycle()
-                return 'LIGHT -> RGB CYCLE'
+                return "LIGHT -> RGB CYCLE"
+            if action == "set_color_temp":
+                self._stop_rgb_cycle()
+                r, g, b = _COLOR_TEMP_RGB.get(int(value), (255, 255, 255))
+                self._fill(r, g, b)
+                return f"LIGHT -> COLOR TEMP {value}"
 
-        if device == 'curtain':
-            if action == 'open':
+        if device == "curtain":
+            if action == "open":
                 self._move_to_position(100)
-                return 'CURTAIN -> OPEN'
-            if action == 'close':
+                return "CURTAIN -> OPEN"
+            if action == "close":
                 self._move_to_position(0)
-                return 'CURTAIN -> CLOSE'
-            if action == 'set_position':
-                self._move_to_position(value)
-                return f'CURTAIN -> POSITION {value}%'
+                return "CURTAIN -> CLOSE"
+            if action == "set_position":
+                self._move_to_position(int(value))
+                return f"CURTAIN -> POSITION {value}%"
 
-        return f'[STUB] {device} {action}'
+        if device == "ac":
+            if action == "turn_on":
+                self._set_fan(50.0)
+                return "AC -> ON (fan 50%)"
+            if action == "turn_off":
+                self._set_fan(0.0)
+                return "AC -> OFF"
+            if action == "set_temperature":
+                duty = _temp_to_duty(int(value))
+                self._set_fan(duty)
+                return f"AC -> TEMPERATURE {value}C (fan {duty:.0f}%)"
+
+        return f"[STUB] {device} {action}"
 
     def cleanup(self) -> None:
         self._stop_rgb_cycle()
-        self._set_color(0, 0, 0)
+        self._fill(0, 0, 0)
+        self._set_fan(0.0)
+        lgpio.tx_pwm(self._h, FAN_PIN, FAN_FREQ_HZ, 0)
         self._release_motor()
         lgpio.gpiochip_close(self._h)

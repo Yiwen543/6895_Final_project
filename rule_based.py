@@ -19,6 +19,12 @@ def try_rule_based(text: str) -> Optional[Dict[str, Any]]:
         if 0 <= val <= 100:
             return {"type": "direct_command", "device": "light", "action": "set_brightness", "value": val}
 
+    # Color temp: "set color temp to 3" or "color temperature 4"
+    m = re.search(r"color\s*temp(?:erature)?.*?([1-5])|([1-5]).*?color\s*temp(?:erature)?", t)
+    if m:
+        val = int(m.group(1) or m.group(2))
+        return {"type": "direct_command", "device": "light", "action": "set_color_temp", "value": val}
+
     # Curtain/window position: "set curtain to 50 percent"
     m = re.search(r"(curtain|window).*?(\d+)\s*(?:percent|%)|(\d+)\s*(?:percent|%).*?(curtain|window)", t)
     if m:

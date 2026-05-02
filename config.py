@@ -32,10 +32,10 @@ TTS_RATE = 170
 PIPER_MODEL_PATH = "voices/en_US-lessac-medium.onnx"
 
 # ── Assistant identity ────────────────────────────────────────────────────────
-ASSISTANT_NAME = "nova"
+ASSISTANT_NAME = "cathey"
 ASSISTANT_NAME_VARIANTS = [
-    "nova", "nava", "no va", "noba", "noa", "nove", "novia",
-    "noda", "nota", "nora", "know-a", "nana",
+    "cathey", "cathy", "kathy", "katie", "cathie",
+    "cafe", "kaffee", "cate", "catty", "catty",
 ]
 
 # ── Audio capture ─────────────────────────────────────────────────────────────

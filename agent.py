@@ -13,12 +13,14 @@ Four intent types handled:
   invalid                — no response (no "Nova" prefix or empty)
 """
 
+import re
 import threading
+from difflib import SequenceMatcher
 from gpio_executor import GPIOExecutor
 from rule_based import try_rule_based
 from typing import Any, Callable, Dict, Optional
 
-from config import ASSISTANT_NAME_VARIANTS
+from config import ASSISTANT_NAME, ASSISTANT_NAME_VARIANTS
 from schema import (
     build_clarification_reply,
     execute_command,
@@ -26,10 +28,24 @@ from schema import (
     validate_command,
 )
 
+_FUZZY_THRESHOLD = 0.78   # similarity ratio; 0.78 catches 1-edit variants of "cathey"
+_STRIP_PUNCT = re.compile(r"[^\w]")
+
 
 def contains_assistant_name(text: str) -> bool:
     t = text.strip().lower()
-    return any(name in t for name in ASSISTANT_NAME_VARIANTS)
+    # Fast path: exact substring match against all known variants
+    if any(name in t for name in ASSISTANT_NAME_VARIANTS):
+        return True
+    # Fuzzy path: check each word against the canonical name
+    for token in t.split():
+        word = _STRIP_PUNCT.sub("", token)
+        if not word:
+            continue
+        ratio = SequenceMatcher(None, word, ASSISTANT_NAME).ratio()
+        if ratio >= _FUZZY_THRESHOLD:
+            return True
+    return False
 
 
 class NovaAgent:
@@ -119,14 +135,14 @@ class NovaAgent:
                 self._memory.record_skill(self._state["original_text"], cmd)
                 self._update_pref(cmd)
                 self._memory.save_episode(self._state["original_text"], "needs_clarification", reply)
-                self._memory.push_working("nova", reply)
+                self._memory.push_working("cathey", reply)
                 self.reset_dialogue()
                 return self._result(True, semantic, True, reason,
                                     execute_command(cmd), reply, round(ms, 3))
 
             reply = "Sorry, I could not resolve that action safely."
             self._speak(reply)
-            self._memory.push_working("nova", reply)
+            self._memory.push_working("cathey", reply)
             self.reset_dialogue()
             return self._result(True, semantic, False, reason, "SKIPPED", reply, round(ms, 3))
 
@@ -134,14 +150,14 @@ class NovaAgent:
         if self._state["followup_retries"] >= 2:
             reply = "Let's start over. What would you like me to do?"
             self._speak(reply)
-            self._memory.push_working("nova", reply)
+            self._memory.push_working("cathey", reply)
             self.reset_dialogue()
             return self._result(True, {"type": "invalid"}, False,
                                 "clarification_max_retries", "SKIPPED", reply, round(ms, 3))
 
         reply = "Sorry, I didn't catch your choice. Please answer again."
         self._speak(reply)
-        self._memory.push_working("nova", reply)
+        self._memory.push_working("cathey", reply)
         return self._result(True, {"type": "invalid"}, False,
                             "clarification_not_resolved", "SKIPPED", reply, round(ms, 3))
 
@@ -177,7 +193,7 @@ class NovaAgent:
 
         reply = "Sorry, I didn't understand that."
         self._speak(reply)
-        self._memory.push_working("nova", reply)
+        self._memory.push_working("cathey", reply)
         return self._result(True, {"type": "invalid"}, False,
                             "invalid_semantic_result", "SKIPPED", reply, round(ms, 3))
 
@@ -206,11 +222,11 @@ class NovaAgent:
 
             self._update_pref(cmd)
             self._memory.save_episode(text, "direct_command", reply)
-            self._memory.push_working("nova", reply)
+            self._memory.push_working("cathey", reply)
             return self._result(True, semantic, True, reason,
                                 hw_result, reply, round(ms, 3))
 
-        self._memory.push_working("nova", "(command invalid)")
+        self._memory.push_working("cathey", "(command invalid)")
         return self._result(True, semantic, False, reason, "SKIPPED", None, round(ms, 3))
 
     def _do_clarification(self, semantic, text, ms, verbose) -> Dict[str, Any]:
@@ -226,7 +242,7 @@ class NovaAgent:
                 self._memory.record_skill(text, cmd)
                 self._update_pref(cmd)
                 self._memory.save_episode(text, "needs_clarification_auto", reply)
-                self._memory.push_working("nova", reply)
+                self._memory.push_working("cathey", reply)
                 if verbose:
                     print(f"[Procedural Memory] Auto-resolved: {cmd}")
                 return self._result(True, semantic, True, "procedural_memory_auto_resolved",
@@ -245,7 +261,7 @@ class NovaAgent:
             for i, opt in enumerate(semantic["options"], 1):
                 print(f"  [{i}] {option_to_display(opt)}")
         self._speak(clarification)
-        self._memory.push_working("nova", clarification)
+        self._memory.push_working("cathey", clarification)
         return self._result(True, semantic, True, "clarification_requested",
                             "PENDING_USER_REPLY", clarification, round(ms, 3))
 
@@ -258,7 +274,7 @@ class NovaAgent:
             answer, qa_ms = self._llm.answer_qa(text, context, verbose=verbose)
         self._speak(answer)
         self._memory.save_episode(text, "general_qa", answer)
-        self._memory.push_working("nova", answer)
+        self._memory.push_working("cathey", answer)
         return self._result(True, {"type": "general_qa", "answer": answer}, True,
                             "general_qa_answered", "NO_DEVICE_ACTION", answer,
                             round(ms + qa_ms, 3))
