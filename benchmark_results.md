@@ -1,4 +1,4 @@
-# Nova LLM Quantization Benchmark
+# Cathey LLM Quantization Benchmark
 
 **Platform:** Raspberry Pi 5 (ARM64, 4-core Cortex-A76, 8 GB LPDDR4X)  
 **Models:** Qwen2.5-Instruct family, GGUF format, llama-cpp-python inference  

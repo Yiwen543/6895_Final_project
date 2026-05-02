@@ -3,7 +3,7 @@ Audio module: STT, TTS, and continuous voice activity detection (VAD) listener.
 
   STTModel      — Whisper-based speech-to-text (numpy array or file path)
   TTSEngine     — pyttsx3 text-to-speech
-  AudioListener — one-shot recording + continuous VAD loop, feeds into NovaAgent
+  AudioListener — one-shot recording + continuous VAD loop, feeds into CatheyAgent
 """
 
 import io
@@ -115,7 +115,7 @@ class TTSEngine:
 
 class AudioListener:
     """
-    Wraps audio I/O for the Nova pipeline.
+    Wraps audio I/O for the Cathey pipeline.
 
     run_one_round()    — record a fixed-duration clip and process it.
     continuous_loop()  — VAD-gated loop; captures full utterances and feeds agent.

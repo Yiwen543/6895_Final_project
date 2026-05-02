@@ -1,4 +1,7 @@
 import lgpio
+import os
+import random
+import subprocess
 import time
 import threading
 import colorsys
@@ -23,7 +26,7 @@ FAN_TACH_PIN = 16         # GPIO 16 / Pin 36 (optional tachometer input)
 
 # ── Stepper motor (curtain) ───────────────────────────────────────────────────
 MOTOR_PINS          = [5, 6, 13, 26]   # ULN2003 IN1-IN4 → Pins 29,31,33,37
-CURTAIN_TOTAL_STEPS = 2048
+CURTAIN_TOTAL_STEPS = 10240             # 5 revolutions full travel
 STEP_DELAY          = 0.002
 WINDOW_STEP_DELAY   = 0.002
 
@@ -32,15 +35,18 @@ RGB_HUE_STEP   = 0.01
 RGB_CYCLE_TICK = 0.1
 
 
+# Brightness level 1-5 → percentage (1=dimmest, 5=full)
+_BRIGHTNESS_PCT = {1: 20, 2: 40, 3: 60, 4: 80, 5: 100}
+
 # Color temperature lookup: level 1-5 → (R, G, B)
 # Scale: 1=coldest(6500K/daylight) … 5=warmest(2700K/candlelight)
 # Direction matches LLM intuition: small number = cold, large = warm.
 _COLOR_TEMP_RGB = {
-    1: (255, 255, 255),   # 6500K — daylight / cold white
-    2: (255, 255, 230),   # 5000K — reading / cool white
-    3: (255, 255, 200),   # 4000K — neutral / daily
-    4: (255, 197, 143),   # 3000K — warm white / relax
-    5: (255, 147,  41),   # 2700K — candlelight / warm
+    1: (180, 210, 255),   # 6500K — cool blue-white / daylight
+    2: (255, 255, 255),   # 5000K — neutral white / reading
+    3: (255, 240, 160),   # 4000K — warm white / daily
+    4: (255, 180,  60),   # 3000K — amber / relax
+    5: (255, 100,  20),   # 2700K — deep orange / candlelight
 }
 
 
@@ -81,7 +87,7 @@ class GPIOExecutor:
 
         # ── Device state ──────────────────────────────────────────────────────
         self._color_temp_level = 3
-        self._brightness_level = 100
+        self._brightness_level = 5   # 1-5, default full brightness
 
         # ── Fan (PWM) ─────────────────────────────────────────────────────────
         lgpio.gpio_claim_output(self._h, FAN_PIN)
@@ -103,6 +109,11 @@ class GPIOExecutor:
         self._rgb_thread = None
         self._rgb_lock   = threading.Lock()
 
+        self._party_stop    = threading.Event()
+        self._party_thread  = None
+        self._party_music   = None
+        self._party_lock    = threading.Lock()
+
     # ── LED helpers ───────────────────────────────────────────────────────────
 
     def _fill(self, r: int, g: int, b: int) -> None:
@@ -111,9 +122,11 @@ class GPIOExecutor:
         self._strip.fill_strip(r, g, b)
         self._strip.update_strip()
 
-    def _fill_brightness(self, pct: int) -> None:
-        v = int(round(255 * pct / 100))
-        self._fill(v, v, v)
+    def _apply_light(self) -> None:
+        """Render current color_temp_level × brightness_level to LEDs."""
+        scale = _BRIGHTNESS_PCT.get(self._brightness_level, 100) / 100.0
+        r, g, b = _COLOR_TEMP_RGB.get(self._color_temp_level, (255, 255, 255))
+        self._fill(int(r * scale), int(g * scale), int(b * scale))
 
     def _start_rgb_cycle(self) -> None:
         with self._rgb_lock:
@@ -147,6 +160,54 @@ class GPIOExecutor:
                     )
                 self._strip.update_strip()
                 time.sleep(RGB_CYCLE_TICK)
+
+    # ── Party mode helpers ────────────────────────────────────────────────────
+
+    _DISCO_COLORS = [
+        (255, 0, 0), (0, 255, 0), (0, 0, 255),
+        (255, 255, 0), (255, 0, 255), (0, 255, 255),
+        (255, 128, 0), (128, 0, 255), (255, 0, 128),
+    ]
+
+    def _start_party(self) -> None:
+        with self._party_lock:
+            self._stop_party_unsafe()
+            self._party_stop.clear()
+            self._party_thread = threading.Thread(
+                target=self._party_loop, daemon=True
+            )
+            self._party_thread.start()
+            env = {**os.environ, "XDG_RUNTIME_DIR": "/run/user/1000"}
+            try:
+                self._party_music = subprocess.Popen(
+                    ["mpg123", "-q", "/home/tl3461/Downloads/Rick-roll.mp3"],
+                    env=env
+                )
+            except FileNotFoundError:
+                self._party_music = None
+
+    def _stop_party(self) -> None:
+        with self._party_lock:
+            self._stop_party_unsafe()
+
+    def _stop_party_unsafe(self) -> None:
+        self._party_stop.set()
+        if self._party_thread and self._party_thread.is_alive():
+            self._party_thread.join(timeout=0.5)
+        if self._party_music and self._party_music.poll() is None:
+            self._party_music.terminate()
+        self._party_music = None
+
+    def _party_loop(self) -> None:
+        """Disco strobe: random saturated colors flashing at ~5 fps."""
+        while not self._party_stop.is_set():
+            r, g, b = random.choice(self._DISCO_COLORS)
+            self._fill(r, g, b)
+            time.sleep(0.15)
+            if self._party_stop.is_set():
+                break
+            self._fill(0, 0, 0)
+            time.sleep(0.05)
 
     # ── Fan helpers ───────────────────────────────────────────────────────────
 
@@ -211,27 +272,33 @@ class GPIOExecutor:
         value  = cmd.get("value")
 
         if device == "light":
-            if action == "turn_on":
+            if action == "party_mode":
                 self._stop_rgb_cycle()
-                self._fill(255, 255, 255)
+                self._start_party()
+                return "LIGHT -> PARTY MODE"
+            if action == "turn_on":
+                self._stop_rgb_cycle(); self._stop_party()
+                self._brightness_level = 5
+                self._apply_light()
                 return "LIGHT -> ON"
             if action == "turn_off":
-                self._stop_rgb_cycle()
+                self._stop_rgb_cycle(); self._stop_party()
                 self._fill(0, 0, 0)
                 return "LIGHT -> OFF"
             if action == "set_brightness":
-                self._stop_rgb_cycle()
-                self._brightness_level = int(value)
-                self._fill_brightness(self._brightness_level)
-                return f"LIGHT -> BRIGHTNESS {value}%"
+                self._stop_rgb_cycle(); self._stop_party()
+                pct = int(value)
+                self._brightness_level = max(1, min(5, round(pct / 20)))
+                self._apply_light()
+                return f"LIGHT -> BRIGHTNESS level {self._brightness_level} ({pct}%)"
             if action == "rgb_cycle":
+                self._stop_party()
                 self._start_rgb_cycle()
                 return "LIGHT -> RGB CYCLE"
             if action == "set_color_temp":
-                self._stop_rgb_cycle()
+                self._stop_rgb_cycle(); self._stop_party()
                 self._color_temp_level = int(value)
-                r, g, b = _COLOR_TEMP_RGB.get(self._color_temp_level, (255, 255, 255))
-                self._fill(r, g, b)
+                self._apply_light()
                 return f"LIGHT -> COLOR TEMP {value}"
 
         if device == "curtain":
@@ -272,6 +339,7 @@ class GPIOExecutor:
 
     def cleanup(self) -> None:
         self._stop_rgb_cycle()
+        self._stop_party()
         self._fill(0, 0, 0)
         self._set_fan(0.0)
         lgpio.tx_pwm(self._h, FAN_PIN, FAN_FREQ_HZ, 0)

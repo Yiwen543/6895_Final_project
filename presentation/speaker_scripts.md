@@ -1,4 +1,4 @@
-# Nova Final Presentation — Speaker Scripts
+# Cathey Final Presentation — Speaker Scripts
 
 EECS 6895 Final Project · Total time: ~12 minutes (10 min talk + ~2 min demo/QA buffer)
 
@@ -16,7 +16,7 @@ Each speaker's words are written in simple English that is easy to remember and 
 
 ### [Slide 1 — Title]
 
-Hello everyone. We are group [number]. Today we are presenting our EECS 6895 final project, called Nova. Nova is an offline voice-controlled smart home assistant that runs on a Raspberry Pi 5. I am [Name 1], and my teammates [Name 2] and [Name 3] will continue after me.
+Hello everyone. We are group [number]. Today we are presenting our EECS 6895 final project, called Nova. Cathey is an offline voice-controlled smart home assistant that runs on a Raspberry Pi 5. I am [Name 1], and my teammates [Name 2] and [Name 3] will continue after me.
 
 ### [Slide 2 — Motivation]
 
@@ -42,7 +42,7 @@ And finally, we have a real hardware demo — an LED ring and a stepper-motor cu
 
 ### [Slide 4 — System Pipeline]
 
-Here is the full pipeline. Audio comes in from the microphone and goes through a voice activity detector. Whisper, the speech-to-text model, turns it into text. Then a wake-word filter checks for the word "Nova" or one of its variants.
+Here is the full pipeline. Audio comes in from the microphone and goes through a voice activity detector. Whisper, the speech-to-text model, turns it into text. Then a wake-word filter checks for the word "Cathey" or one of its variants.
 
 After that, the text first goes to the rule-based fast path. If the regex matches, we return the command immediately. If not, we fall back to the LLM. The agent dispatches the result based on its intent type, updates memory, validates the command, and finally runs the GPIO action and the TTS reply in parallel threads, so the user hears the reply at the same time as the device acts.
 
@@ -168,5 +168,5 @@ Thank you for listening. We are happy to take any questions.
 - **Why a regex layer instead of just trusting the LLM?** Latency. The LLM is 4 seconds; the regex is 5 milliseconds. For the 70% of commands that are unambiguous, the LLM adds nothing.
 - **How do you handle privacy on the Pi itself?** Everything is local. The audio buffer is processed in RAM (no temp WAV files written to disk). Episodic memory is local to the device. Nothing leaves the Pi.
 - **Why only 225 training samples?** Because LoRA on a 3B model with response-only loss masking does not need much data. Adding more samples is a clear next step.
-- **What if the user has an accent and Whisper mishears "Nova"?** We added a list of variants ("nava", "noba", "noa", ...). A dedicated wake-word detector like openWakeWord would be the long-term fix.
+- **What if the user has an accent and Whisper mishears "Cathey"?** We added a list of variants ("nava", "noba", "noa", ...). A dedicated wake-word detector like openWakeWord would be the long-term fix.
 - **Does the LLM call run on GPU?** No. The Pi 5 has no usable GPU for LLMs. Everything is on the 4-core Cortex-A76 CPU through llama.cpp with OpenBLAS.

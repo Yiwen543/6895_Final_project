@@ -1,5 +1,5 @@
 """
-model_comparison.py — Nova Smart Home Assistant: 三模型横向对比评测脚本
+model_comparison.py — Cathey Smart Home Assistant: 三模型横向对比评测脚本
 
 加载 TinyLlama-1.1B-Chat、Qwen2.5-1.5B-Instruct、Phi-2 三个模型，
 使用相同的测试用例进行推理，对比分类准确率与推理延迟，
@@ -62,49 +62,49 @@ CRITICAL classification rules:
 
 Examples:
 
-Input: Nova, turn on the light.
+Input: Cathey, turn on the light.
 Output: {"type":"direct_command","device":"light","action":"turn_on","value":null}
 
-Input: Nova, turn off the light.
+Input: Cathey, turn off the light.
 Output: {"type":"direct_command","device":"light","action":"turn_off","value":null}
 
-Input: Nova, set the AC to 24 degrees.
+Input: Cathey, set the AC to 24 degrees.
 Output: {"type":"direct_command","device":"ac","action":"set_temperature","value":24}
 
-Input: Nova, open the curtain.
+Input: Cathey, open the curtain.
 Output: {"type":"direct_command","device":"curtain","action":"open","value":null}
 
-Input: Nova, close the window.
+Input: Cathey, close the window.
 Output: {"type":"direct_command","device":"window","action":"close","value":null}
 
-Input: Nova, I feel cold.
+Input: Cathey, I feel cold.
 Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"]}
 
-Input: Nova, I feel a little bit cold.
+Input: Cathey, I feel a little bit cold.
 Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"]}
 
-Input: Nova, it's a bit dark.
+Input: Cathey, it's a bit dark.
 Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
 
-Input: Nova, this room is too dark.
+Input: Cathey, this room is too dark.
 Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
 
-Input: Nova, I feel hot.
+Input: Cathey, I feel hot.
 Output: {"type":"needs_clarification","question":"Would you like me to open the window or lower the AC temperature?","options":["open_window","lower_ac_temperature"]}
 
-Input: Nova, fuck this light.
+Input: Cathey, fuck this light.
 Output: {"type":"needs_clarification","question":"Would you like me to turn off the light or dim it?","options":["turn_off_light","dim_light"]}
 
-Input: Nova, this light is annoying.
+Input: Cathey, this light is annoying.
 Output: {"type":"needs_clarification","question":"Would you like me to turn off the light or dim it?","options":["turn_off_light","dim_light"]}
 
-Input: Nova, make this room lively.
+Input: Cathey, make this room lively.
 Output: {"type":"needs_clarification","question":"Would you like me to turn on the RGB cycle or open the curtain?","options":["rgb_cycle","open_curtain"]}
 
-Input: Nova, how do I eat an apple?
+Input: Cathey, how do I eat an apple?
 Output: {"type":"general_qa","answer":"Wash it first, then eat it."}
 
-Input: Nova, can I still eat this dish after a night in the fridge?
+Input: Cathey, can I still eat this dish after a night in the fridge?
 Output: {"type":"general_qa","answer":"Yes, most cooked food is safe for up to 3-4 days in the fridge."}
 
 Input: Hello.
@@ -118,76 +118,76 @@ Output: {"type":"invalid"}
 TEST_CASES = [
     # ---- direct_command ----
     {
-        "input": "Nova, turn on the light.",
+        "input": "Cathey, turn on the light.",
         "expected_type": "direct_command",
         "description": "明确设备+动作：开灯",
     },
     {
-        "input": "Nova, turn off the light.",
+        "input": "Cathey, turn off the light.",
         "expected_type": "direct_command",
         "description": "明确设备+动作：关灯",
     },
     {
-        "input": "Nova, set the AC to 24 degrees.",
+        "input": "Cathey, set the AC to 24 degrees.",
         "expected_type": "direct_command",
         "description": "明确设备+数值：空调设温度",
     },
     {
-        "input": "Nova, open the curtain.",
+        "input": "Cathey, open the curtain.",
         "expected_type": "direct_command",
         "description": "明确设备+动作：开窗帘",
     },
     {
-        "input": "Nova, close the window.",
+        "input": "Cathey, close the window.",
         "expected_type": "direct_command",
         "description": "明确设备+动作：关窗户",
     },
 
     # ---- needs_clarification ----
     {
-        "input": "Nova, I feel a little bit cold.",
+        "input": "Cathey, I feel a little bit cold.",
         "expected_type": "needs_clarification",
         "description": "间接需求：感觉冷（不指定设备）",
     },
     {
-        "input": "Nova, it's a bit dark.",
+        "input": "Cathey, it's a bit dark.",
         "expected_type": "needs_clarification",
         "description": "间接需求：有点暗（不指定动作）",
     },
     {
-        "input": "Nova, fuck this light.",
+        "input": "Cathey, fuck this light.",
         "expected_type": "needs_clarification",
         "description": "间接需求：抱怨灯光（无明确动作）",
     },
     {
-        "input": "Nova, make this room lively.",
+        "input": "Cathey, make this room lively.",
         "expected_type": "needs_clarification",
         "description": "间接需求：氛围请求",
     },
     {
-        "input": "Nova, I feel hot.",
+        "input": "Cathey, I feel hot.",
         "expected_type": "needs_clarification",
         "description": "间接需求：感觉热",
     },
     {
-        "input": "Nova, this light is annoying.",
+        "input": "Cathey, this light is annoying.",
         "expected_type": "needs_clarification",
         "description": "间接需求：抱怨灯光",
     },
 
     # ---- general_qa ----
     {
-        "input": "Nova, how can I eat an apple?",
+        "input": "Cathey, how can I eat an apple?",
         "expected_type": "general_qa",
         "description": "通用问答：与设备无关的问题",
     },
     {
-        "input": "Nova, can I still eat this dish after one night in the fridge?",
+        "input": "Cathey, can I still eat this dish after one night in the fridge?",
         "expected_type": "general_qa",
         "description": "通用问答：食物保存问题",
     },
     {
-        "input": "Nova, what time is it?",
+        "input": "Cathey, what time is it?",
         "expected_type": "general_qa",
         "description": "通用问答：询问时间",
     },

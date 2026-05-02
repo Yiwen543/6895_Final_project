@@ -1,4 +1,4 @@
-# Nova Smart Home Assistant — CLAUDE.md
+# Cathey Smart Home Assistant — CLAUDE.md
 
 EECS 6895 Final Project. Nova 是一个运行在树莓派 5 上的本地语音智能家居助手，
 完全本地推理（无云端），使用 faster-whisper 做 STT、Qwen2.5-3B-Instruct（GGUF Q3_K_M）做意图解析、Piper 做 TTS。
@@ -9,7 +9,7 @@ EECS 6895 Final Project. Nova 是一个运行在树莓派 5 上的本地语音�
 
 | 文件 | 说明 |
 |------|------|
-| `nova.py` | 入口，将所有组件串联 |
+| `cathey.py` | 入口，将所有组件串联 |
 | `agent.py` | 有状态意图处理器（direct_command / needs_clarification / general_qa / invalid） |
 | `audio.py` | STT（faster-whisper）、TTS（Piper）、VAD 录音循环（AudioListener） |
 | `llm_parser.py` | LLM 推理：parse_unified / resolve_followup / answer_qa；system prompt 在此维护 |
@@ -19,7 +19,7 @@ EECS 6895 Final Project. Nova 是一个运行在树莓派 5 上的本地语音�
 | `rule_based.py` | 正则快速路径，处理无歧义直接指令（<5ms） |
 | `gpio_executor.py` | GPIO 硬件执行 |
 | `benchmark_quantization.py` | 独立 GGUF 量化基准测试脚本 |
-| `nova.service` | systemd 服务文件 |
+| `cathey.service` | systemd 服务文件 |
 | `deploy.sh` | 部署脚本（rsync + 模型下载） |
 
 > 旧版 `Nova_4_16.ipynb`、`lora_training.ipynb`、`model_comparison.py` 为遗留文件，不再是主 pipeline。
@@ -66,7 +66,7 @@ EECS 6895 Final Project. Nova 是一个运行在树莓派 5 上的本地语音�
 
 ## 助手身份
 
-- **名称**：nova
+- **名称：cathey
 - **唤醒词变体**：`["nova", "nava", "no va", "noba", "noa", "nove", "novia", "noda", "nota", "nora", "know-a", "nana"]`
 
 ---

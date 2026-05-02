@@ -27,7 +27,7 @@ def main():
     print("STT ready.  Input device: %s\n" % _INPUT_DEVICE)
 
     for i in range(ROUNDS):
-        print("=== Round %d/%d: say 'Nova, turn on the light' ===" % (i + 1, ROUNDS))
+        print("=== Round %d/%d: say 'Cathey, turn on the light' ===" % (i + 1, ROUNDS))
         for c in [3, 2, 1]:
             print("  %d..." % c)
             time.sleep(1)

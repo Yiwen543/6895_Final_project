@@ -1,5 +1,5 @@
 [Unit]
-Description=Nova Smart Home Assistant
+Description=Cathey Smart Home Assistant
 After=sound.target bt-speaker.service
 Wants=bt-speaker.service
 
@@ -14,7 +14,7 @@ Environment=TRANSFORMERS_OFFLINE=1
 Environment=HF_DATASETS_OFFLINE=1
 Environment=TOKENIZERS_PARALLELISM=false
 Environment=TQDM_DISABLE=1
-ExecStart=/usr/bin/python3 nova.py
+ExecStart=/usr/bin/python3 cathey.py
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

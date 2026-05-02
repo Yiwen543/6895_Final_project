@@ -5,6 +5,25 @@ from typing import Optional, Dict, Any
 def try_rule_based(text: str, state: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
     t = text.lower()
 
+    # Stop party / stop music (must come before party_mode to avoid false match)
+    if re.search(r'\bstop\b.*\b(?:party|music|song|rick)\b|\b(?:party|music|song)\b.*\bstop\b', t):
+        return {"type": "direct_command", "device": "light", "action": "turn_off", "value": None}
+
+    # Party mode easter egg
+    if re.search(r'\bparty\s*(?:mode|time)?\b|\bdisco\b', t):
+        return {"type": "direct_command", "device": "light", "action": "party_mode", "value": None}
+
+    # Relative brightness: "darker/dimmer" → -1, "brighter/lighter" → +1
+    _darker   = re.search(r'\b(?:darker|dimmer|less\s+bright|lower\s+brightness|dim)\b', t)
+    _brighter = re.search(r'\b(?:brighter|lighter|raise\s+brightness|more\s+bright)\b', t)
+    if _darker or _brighter:
+        if re.search(r'\blight\b', t) or re.search(r'\bmake\s+it\b', t):
+            delta   = 1 if _brighter else -1
+            current = (state or {}).get("brightness", 5)
+            new_level = max(1, min(5, current + delta))
+            return {"type": "direct_command", "device": "light",
+                    "action": "set_brightness", "value": new_level * 20}
+
     # Relative color temperature: "warmer/cozier" → +1, "cooler/colder" → -1
     _warmer = re.search(r'\b(?:warmer|cozier|more\s+warm)\b', t)
     _cooler = re.search(r'\b(?:cooler|colder|more\s+coo?l|more\s+cold)\b', t)

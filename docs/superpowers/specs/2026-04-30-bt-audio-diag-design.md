@@ -1,5 +1,5 @@
 # Bluetooth Audio Diagnostic Script Design
-**Project:** Nova Smart Home Assistant — EECS 6895 Final Project  
+**Project:** Cathey Smart Home Assistant — EECS 6895 Final Project  
 **Date:** 2026-04-30  
 **Goal:** Diagnose root cause of choppy Bluetooth A2DP audio on Raspberry Pi 5.
 

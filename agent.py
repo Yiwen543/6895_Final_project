@@ -1,5 +1,5 @@
 """
-NovaAgent: stateful agent that takes STT text and drives the full pipeline.
+CatheyAgent: stateful agent that takes STT text and drives the full pipeline.
 
 Dependencies injected at construction time:
   llm    — LLMParser  (classification + QA generation)
@@ -10,7 +10,7 @@ Four intent types handled:
   direct_command         — execute device action immediately
   needs_clarification    — ask user to pick an option; auto-resolve via procedural memory
   general_qa             — answer with RAG-augmented context
-  invalid                — no response (no "Nova" prefix or empty)
+  invalid                — no response (no "Cathey" prefix or empty)
 """
 
 import re
@@ -48,7 +48,7 @@ def contains_assistant_name(text: str) -> bool:
     return False
 
 
-class NovaAgent:
+class CatheyAgent:
 
     def __init__(self, llm, memory, speak: Callable[[str], None],
                  gpio: GPIOExecutor = None):

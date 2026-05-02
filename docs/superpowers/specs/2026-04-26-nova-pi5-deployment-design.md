@@ -1,7 +1,7 @@
-# Nova Pi 5 Deployment Design
+# Cathey Pi 5 Deployment Design
 
 **Date:** 2026-04-26
-**Project:** Nova Smart Home Assistant — EECS 6895 Final Project
+**Project:** Cathey Smart Home Assistant — EECS 6895 Final Project
 **Scope:** Deploy the Nova pipeline to Raspberry Pi 5 (8GB) as a systemd service with GPIO hardware control and latency optimizations. No model architecture changes in this phase; GGUF quantization is planned separately.
 
 ---
@@ -23,10 +23,10 @@
 
 ```
 nova/
-├── nova.py                          # Main pipeline (refactored from Nova_4_16.ipynb)
+├── cathey.py                          # Main pipeline (refactored from Nova_4_16.ipynb)
 ├── gpio_executor.py                 # GPIO control layer (LED + stepper)
 ├── requirements_pi.txt              # Pi-specific dependencies
-├── nova.service                     # systemd main service
+├── cathey.service                     # systemd main service
 ├── bt-speaker.service               # Bluetooth auto-connect service
 ├── deploy.sh                        # One-command deploy script (run from dev machine)
 └── voices/
@@ -34,9 +34,9 @@ nova/
 ```
 
 **Layer boundaries:**
-- `nova.py` owns pipeline logic (STT → rule engine → LLM → TTS). It calls `gpio_executor.execute(cmd)` but knows nothing about GPIO internals.
+- `cathey.py` owns pipeline logic (STT → rule engine → LLM → TTS). It calls `gpio_executor.execute(cmd)` but knows nothing about GPIO internals.
 - `gpio_executor.py` owns hardware. It receives a standard `cmd` dict (same schema as the existing `execute_command`) and knows nothing about the LLM.
-- Swapping the model later (GGUF) only touches `nova.py`. Adding a new device only touches `gpio_executor.py`.
+- Swapping the model later (GGUF) only touches `cathey.py`. Adding a new device only touches `gpio_executor.py`.
 
 ---
 
@@ -90,7 +90,7 @@ USB_SOURCE=$(pactl list sources short | grep -i usb | awk '{print $2}' | head -1
 pactl set-default-source "$USB_SOURCE"
 ```
 
-`nova.py` 中 `sounddevice` 使用系统默认输入，无需硬编码设备索引，重新插拔后仍有效。
+`cathey.py` 中 `sounddevice` 使用系统默认输入，无需硬编码设备索引，重新插拔后仍有效。
 
 ### Bluetooth Speaker (one-time manual pairing)
 ```bash
@@ -163,10 +163,10 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ```
 
-### `nova.service`
+### `cathey.service`
 ```ini
 [Unit]
-Description=Nova Smart Home Assistant
+Description=Cathey Smart Home Assistant
 After=sound.target bt-speaker.service
 Wants=bt-speaker.service
 
@@ -174,7 +174,7 @@ Wants=bt-speaker.service
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/nova
-ExecStart=/usr/bin/python3 nova.py
+ExecStart=/usr/bin/python3 cathey.py
 Restart=on-failure
 RestartSec=5
 
@@ -182,7 +182,7 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-`nova.service` depends on `bt-speaker.service` so the speaker is connected before the pipeline starts.
+`cathey.service` depends on `bt-speaker.service` so the speaker is connected before the pipeline starts.
 
 ---
 
@@ -201,7 +201,7 @@ Steps executed:
    - Download Piper voice model to `~/nova/voices/` if not present
    - Set SunFounder USB mic as default PipeWire input (`pactl set-default-source`)
    - Write `bt-speaker.service` with the provided MAC address
-   - Write `nova.service`
+   - Write `cathey.service`
    - `systemctl daemon-reload && systemctl enable bt-speaker nova`
 3. Print pairing reminder if this is the first deploy
 4. Ask whether to `systemctl start nova` immediately

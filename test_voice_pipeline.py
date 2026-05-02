@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sentence_transformers import SentenceTransformer
 from llm_parser import LLMParser
 from memory import MemoryManager
-from agent import NovaAgent
+from agent import CatheyAgent
 from audio import STTModel, TTSEngine, _INPUT_DEVICE
 from config import SAMPLE_RATE, CHANNELS, AUDIO_DTYPE, ASSISTANT_NAME_VARIANTS
 
@@ -33,13 +33,13 @@ def main():
     llm    = LLMParser()
     tts    = TTSEngine()
     memory = MemoryManager(embed_fn=embed)
-    nova   = NovaAgent(llm=llm, memory=memory, speak=tts.speak)
+    nova   = CatheyAgent(llm=llm, memory=memory, speak=tts.speak)
     stt    = STTModel()
     print("All models ready.\n")
     print("Suggested commands to try:")
-    print("  'Nova, turn on the light'")
-    print("  'Nova, set the AC to 24 degrees'")
-    print("  'Nova, I feel cold'")
+    print("  'Cathey, turn on the light'")
+    print("  'Cathey, set the AC to 24 degrees'")
+    print("  'Cathey, I feel cold'")
     print("=" * 60)
     print()
 

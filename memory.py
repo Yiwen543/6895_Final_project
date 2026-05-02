@@ -205,7 +205,7 @@ class MemoryManager:
 
     # ── Episodic memory ───────────────────────────────────────────────────────
 
-    def save_episode(self, user_text: str, result_type: str, nova_reply: str = ""):
+    def save_episode(self, user_text: str, result_type: str, cathey_reply: str = ""):
         self.episodes.add(
             ids=[str(uuid.uuid4())],
             embeddings=[self._embed(user_text)],
@@ -213,7 +213,7 @@ class MemoryManager:
             metadatas=[{
                 "ts":          datetime.now().isoformat(timespec="seconds"),
                 "result_type": result_type,
-                "nova_reply":  nova_reply[:300],
+                "cathey_reply":  cathey_reply[:300],
             }],
         )
 
@@ -250,7 +250,7 @@ class MemoryManager:
         # Episodic — semantically similar past interactions
         eps = self.retrieve_episodes(current_input, n=max_episodes)
         relevant = [
-            f"[{ep['meta']['ts'][:16]}] User: {ep['text']} → Nova: {ep['meta']['nova_reply']}"
+            f"[{ep['meta']['ts'][:16]}] User: {ep['text']} → Cathey: {ep['meta']['cathey_reply']}"
             for ep in eps
             if ep["distance"] < EPISODE_DIST_CUTOFF
         ]

@@ -1,10 +1,10 @@
-# Nova Pi 5 Deployment — Implementation Plan
+# Cathey Pi 5 Deployment — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deploy Nova Smart Home Assistant to Raspberry Pi 5 (8GB) as a systemd service, with Grove RGB LED + 28BYJ-48 stepper motor control via GPIO, Piper TTS, and four latency optimisations (rule-based fast path, parallel GPIO+TTS, max_new_tokens=96, Piper).
+**Goal:** Deploy Cathey Smart Home Assistant to Raspberry Pi 5 (8GB) as a systemd service, with Grove RGB LED + 28BYJ-48 stepper motor control via GPIO, Piper TTS, and four latency optimisations (rule-based fast path, parallel GPIO+TTS, max_new_tokens=96, Piper).
 
-**Architecture:** The project is already modular: `config.py` (all config), `schema.py` (device schema/validation), `llm_parser.py` (LLMParser class, Qwen2.5-1.5B), `agent.py` (NovaAgent pipeline), `audio.py` (STT/TTS/AudioListener), `memory.py` (MemoryManager). `nova.py` is a thin orchestration entry point that initialises all components and runs `AudioListener`. `gpio_executor.py` is injected into `NovaAgent`. `deploy.sh` runs from the dev machine.
+**Architecture:** The project is already modular: `config.py` (all config), `schema.py` (device schema/validation), `llm_parser.py` (LLMParser class, Qwen2.5-1.5B), `agent.py` (CatheyAgent pipeline), `audio.py` (STT/TTS/AudioListener), `memory.py` (MemoryManager). `cathey.py` is a thin orchestration entry point that initialises all components and runs `AudioListener`. `gpio_executor.py` is injected into `CatheyAgent`. `deploy.sh` runs from the dev machine.
 
 **Tech Stack:** Python 3.11, Qwen2.5-1.5B-Instruct, lgpio (Pi 5 GPIO), piper-tts, faster-whisper, transformers, sentence-transformers, sounddevice, PipeWire, systemd, Bluetooth
 
@@ -24,8 +24,8 @@
 | `config.py` | Modify | Change LLM_MAX_NEW_TOKENS 160→96, add PIPER_MODEL_PATH |
 | `audio.py` | Modify | Replace TTSEngine pyttsx3 → Piper |
 | `agent.py` | Modify | Add gpio param, rule-based fast path, parallel GPIO+TTS |
-| `nova.py` | Create | Thin orchestration entry point |
-| `nova.service` | Create | systemd service for Nova |
+| `cathey.py` | Create | Thin orchestration entry point |
+| `cathey.service` | Create | systemd service for Nova |
 | `bt-speaker.service` | Create | systemd Bluetooth auto-connect |
 | `deploy.sh` | Create | One-command deploy from dev machine |
 
@@ -316,14 +316,14 @@ cd /Users/ezslaptop/Projects/6895_Final_project && git add gpio_executor.py && g
 
 ---
 
-### Task 5: config.py update + nova.py entry point
+### Task 5: config.py update + cathey.py entry point
 
 **Files:**
 - Modify: `config.py` — change `LLM_MAX_NEW_TOKENS`, add `PIPER_MODEL_PATH`
 - Modify: `requirements_pi.txt` — add `sentence-transformers`
-- Create: `nova.py` — thin orchestration entry point
+- Create: `cathey.py` — thin orchestration entry point
 
-**Context:** The project is already modular. `nova.py` only needs to import and wire together existing components: `LLMParser`, `MemoryManager`, `STTModel`, `TTSEngine` (Piper, after Task 6), `GPIOExecutor`, `NovaAgent`, and `AudioListener`.
+**Context:** The project is already modular. `cathey.py` only needs to import and wire together existing components: `LLMParser`, `MemoryManager`, `STTModel`, `TTSEngine` (Piper, after Task 6), `GPIOExecutor`, `CatheyAgent`, and `AudioListener`.
 
 - [ ] **Step 1: Update config.py — change LLM_MAX_NEW_TOKENS and add PIPER_MODEL_PATH**
 
@@ -348,11 +348,11 @@ Append to `requirements_pi.txt`:
 sentence-transformers
 ```
 
-- [ ] **Step 3: Create nova.py**
+- [ ] **Step 3: Create cathey.py**
 
 ```python
 #!/usr/bin/env python3
-"""Nova Smart Home Assistant — Raspberry Pi 5 entry point."""
+"""Cathey Smart Home Assistant — Raspberry Pi 5 entry point."""
 
 import os
 import sys
@@ -362,7 +362,7 @@ from sentence_transformers import SentenceTransformer
 from audio import AudioListener, STTModel, TTSEngine
 from llm_parser import LLMParser
 from memory import MemoryManager
-from agent import NovaAgent
+from agent import CatheyAgent
 from gpio_executor import GPIOExecutor
 from config import EMBED_MODEL_NAME
 
@@ -377,7 +377,7 @@ def main() -> None:
     memory = MemoryManager(embed)
     gpio   = GPIOExecutor()
 
-    nova = NovaAgent(llm=llm, memory=memory, speak=tts.speak, gpio=gpio)
+    nova = CatheyAgent(llm=llm, memory=memory, speak=tts.speak, gpio=gpio)
 
     listener = AudioListener(agent=nova, stt=stt)
 
@@ -395,7 +395,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Verify nova.py imports resolve (no runtime errors on import)**
+- [ ] **Step 4: Verify cathey.py imports resolve (no runtime errors on import)**
 
 ```bash
 cd /Users/ezslaptop/Projects/6895_Final_project && python3 -c "
@@ -413,7 +413,7 @@ Expected: `All imports OK`
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/ezslaptop/Projects/6895_Final_project && git add config.py requirements_pi.txt nova.py && git commit -m "feat: nova.py entry point, max_new_tokens=96, add sentence-transformers"
+cd /Users/ezslaptop/Projects/6895_Final_project && git add config.py requirements_pi.txt cathey.py && git commit -m "feat: cathey.py entry point, max_new_tokens=96, add sentence-transformers"
 ```
 
 ---
@@ -424,7 +424,7 @@ cd /Users/ezslaptop/Projects/6895_Final_project && git add config.py requirement
 - Modify: `audio.py` — replace `TTSEngine` pyttsx3 implementation with Piper
 - Create: `voices/` directory + download voice model
 
-**Context:** `TTSEngine` is instantiated in `nova.py` and passed to `NovaAgent` as `speak=tts.speak`. The interface must stay identical: `speak(text: str, verbose: bool = True)`. Only the internals change.
+**Context:** `TTSEngine` is instantiated in `cathey.py` and passed to `CatheyAgent` as `speak=tts.speak`. The interface must stay identical: `speak(text: str, verbose: bool = True)`. Only the internals change.
 
 - [ ] **Step 1: Download Piper voice model**
 
@@ -511,7 +511,7 @@ cd /Users/ezslaptop/Projects/6895_Final_project && git add audio.py && git commi
 **Files:**
 - Modify: `agent.py` — add `gpio` param, rule-based fast path, parallel GPIO+TTS
 
-**Context:** `NovaAgent.__init__` currently takes `llm`, `memory`, `speak`. We add `gpio: GPIOExecutor` as a fourth parameter. The rule-based fast path runs before `self._llm.parse_unified()` in `_handle_new_request`. For `direct_command`, GPIO execution and TTS run concurrently in two threads.
+**Context:** `CatheyAgent.__init__` currently takes `llm`, `memory`, `speak`. We add `gpio: GPIOExecutor` as a fourth parameter. The rule-based fast path runs before `self._llm.parse_unified()` in `_handle_new_request`. For `direct_command`, GPIO execution and TTS run concurrently in two threads.
 
 - [ ] **Step 1: Add gpio import and update __init__**
 
@@ -522,7 +522,7 @@ from gpio_executor import GPIOExecutor
 from rule_based import try_rule_based
 ```
 
-Change `NovaAgent.__init__` signature and body:
+Change `CatheyAgent.__init__` signature and body:
 ```python
 def __init__(self, llm, memory, speak: Callable[[str], None],
              gpio: GPIOExecutor = None):
@@ -547,7 +547,7 @@ if fast is not None:
 semantic, _, ms = self._llm.parse_unified(text, verbose=verbose)
 ```
 
-Add helper method to `NovaAgent`:
+Add helper method to `CatheyAgent`:
 ```python
 @staticmethod
 def _rule_reply(semantic: dict) -> str:
@@ -629,7 +629,7 @@ cd /Users/ezslaptop/Projects/6895_Final_project && git add agent.py && git commi
 
 **Files:**
 - Create: `bt-speaker.service`
-- Create: `nova.service`
+- Create: `cathey.service`
 
 - [ ] **Step 1: Create bt-speaker.service**
 
@@ -650,11 +650,11 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ```
 
-- [ ] **Step 2: Create nova.service**
+- [ ] **Step 2: Create cathey.service**
 
 ```ini
 [Unit]
-Description=Nova Smart Home Assistant
+Description=Cathey Smart Home Assistant
 After=sound.target bt-speaker.service
 Wants=bt-speaker.service
 
@@ -662,7 +662,7 @@ Wants=bt-speaker.service
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/nova
-ExecStart=/usr/bin/python3 nova.py
+ExecStart=/usr/bin/python3 cathey.py
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -675,7 +675,7 @@ WantedBy=multi-user.target
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/ezslaptop/Projects/6895_Final_project && git add bt-speaker.service nova.service && git commit -m "feat: systemd service files for Nova and Bluetooth speaker"
+cd /Users/ezslaptop/Projects/6895_Final_project && git add bt-speaker.service cathey.service && git commit -m "feat: systemd service files for Nova and Bluetooth speaker"
 ```
 
 ---
@@ -727,8 +727,8 @@ echo "==> Writing bt-speaker.service (MAC: ${BT_MAC})"
 ssh "$PI_HOST" "sed 's/PLACEHOLDER_BT_MAC/${BT_MAC}/g' ~/nova/bt-speaker.service | \
     sudo tee /etc/systemd/system/bt-speaker.service > /dev/null"
 
-echo "==> Installing nova.service"
-ssh "$PI_HOST" "sudo cp ~/nova/nova.service /etc/systemd/system/nova.service"
+echo "==> Installing cathey.service"
+ssh "$PI_HOST" "sudo cp ~/nova/cathey.service /etc/systemd/system/cathey.service"
 
 echo "==> Enabling services"
 ssh "$PI_HOST" "sudo systemctl daemon-reload && sudo systemctl enable bt-speaker nova"
@@ -782,20 +782,20 @@ cd /Users/ezslaptop/Projects/6895_Final_project && git add deploy.sh && git comm
 | P9813 full action mapping | Task 3+4 |
 | Stepper half-step + position tracking | Task 3+4 |
 | max_new_tokens=96 | Task 5 (config.py) |
-| nova.py thin orchestration entry point | Task 5 |
+| cathey.py thin orchestration entry point | Task 5 |
 | sentence-transformers in requirements | Task 5 |
 | Piper TTS replaces pyttsx3 in TTSEngine | Task 6 |
 | Rule-based fast path in agent.py | Task 7 |
 | Parallel GPIO + TTS execution | Task 7 |
-| GPIO injected into NovaAgent | Task 7 |
+| GPIO injected into CatheyAgent | Task 7 |
 | SunFounder USB mic → default PipeWire input | Task 9 |
 | Bluetooth auto-connect via bt-speaker.service | Tasks 8–9 |
-| nova.service After=bt-speaker.service | Task 8 |
+| cathey.service After=bt-speaker.service | Task 8 |
 | deploy.sh: rsync + pip + Piper model + systemd | Task 9 |
 
 **Type consistency:**
 - `GPIOExecutor.execute(cmd: dict) -> str` — defined Task 3+4, used Task 7 ✅
 - `try_rule_based(text: str)` — defined Task 2 (done), imported Task 7 ✅
 - `TTSEngine.speak(text, verbose)` — interface unchanged Tasks 6–7 ✅
-- `NovaAgent(llm, memory, speak, gpio)` — defined Task 7, constructed Task 5 ✅
-- `gpio.cleanup()` — defined Task 3+4, called in nova.py Task 5 ✅
+- `CatheyAgent(llm, memory, speak, gpio)` — defined Task 7, constructed Task 5 ✅
+- `gpio.cleanup()` — defined Task 3+4, called in cathey.py Task 5 ✅

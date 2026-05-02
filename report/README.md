@@ -1,4 +1,4 @@
-# Nova — Final Project Report (LaTeX)
+# Cathey — Final Project Report (LaTeX)
 
 EECS 6895 · Columbia University · IEEE conference style.
 

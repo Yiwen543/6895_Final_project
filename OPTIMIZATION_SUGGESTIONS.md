@@ -1,4 +1,4 @@
-# Nova Smart Home Assistant — Optimization Suggestions
+# Cathey Smart Home Assistant — Optimization Suggestions
 
 ## Current State
 
@@ -256,7 +256,7 @@ Replace all calls to `transcribe_audio_file(audio_path)` with `transcribe_audio_
 ## Issue 5 — Wake Word Detection is Fragile
 
 ### What's wrong
-Whisper frequently mishears "Nova" as unrelated words ("Nanaoba", "no", "Henry", etc.), causing valid commands to be silently dropped by the pre-filter. The variant list currently only contains `["nova"]`.
+Whisper frequently mishears "Cathey" as unrelated words ("Nanaoba", "no", "Henry", etc.), causing valid commands to be silently dropped by the pre-filter. The variant list currently only contains `["nova"]`.
 
 ### Fix A — Extend the variant list
 
@@ -268,7 +268,7 @@ ASSISTANT_NAME_VARIANTS = [
 
 ### Fix B — Dedicated wake word detector (long-term)
 
-Use [openWakeWord](https://github.com/dscripka/openWakeWord) to detect the wake word from raw audio before running Whisper. This avoids running STT on every utterance — only process audio that already contains a confirmed "Nova".
+Use [openWakeWord](https://github.com/dscripka/openWakeWord) to detect the wake word from raw audio before running Whisper. This avoids running STT on every utterance — only process audio that already contains a confirmed "Cathey".
 
 ```bash
 pip install openwakeword
@@ -287,7 +287,7 @@ def has_wake_word(audio: np.ndarray) -> bool:
 In `collect_one_utterance_from_stream`, call `has_wake_word(audio)` before passing to STT. Reduces Whisper calls by ~80%.
 
 ### Expected impact
-Eliminates missed commands caused by STT mishearing "Nova", particularly for non-native English speakers or noisy environments.
+Eliminates missed commands caused by STT mishearing "Cathey", particularly for non-native English speakers or noisy environments.
 
 ---
 

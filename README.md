@@ -1,9 +1,9 @@
-# Nova — Offline Smart Home Assistant
+# Cathey — Offline Smart Home Assistant
 
 EECS 6895 Final Project · Columbia University
 
-Nova is a fully offline voice assistant deployable on a **Raspberry Pi 5**.  
-It listens for the wake word "Nova", classifies user intent into 4 categories, executes smart home commands, and learns user preferences over time using a four-layer memory system.
+Cathey is a fully offline voice assistant deployable on a **Raspberry Pi 5**.  
+It listens for the wake word "Cathey", classifies user intent into 4 categories, executes smart home commands, and learns user preferences over time using a four-layer memory system.
 
 ---
 
@@ -16,7 +16,7 @@ It listens for the wake word "Nova", classifies user intent into 4 categories, e
 ├── schema.py               # Device schema, command validation, execution
 ├── llm_parser.py           # LLM loading + 3 inference methods
 ├── memory.py               # Four-layer memory system (working/episodic/semantic/procedural)
-├── agent.py                # NovaAgent — intent routing + dialogue state machine
+├── agent.py                # CatheyAgent — intent routing + dialogue state machine
 ├── audio.py                # STT (Whisper) + TTS (pyttsx3) + VAD audio listener
 ├── finetune/
 │   ├── train_data.py       # Labelled training data (input → JSON pairs)
@@ -35,7 +35,7 @@ It listens for the wake word "Nova", classifies user intent into 4 categories, e
 | `direct_command` | Device + explicit action | "Nova, turn on the light." |
 | `needs_clarification` | Vague feeling / preference | "Nova, it's a bit dark." |
 | `general_qa` | Non-device question | "Nova, how do I eat an apple?" |
-| `invalid` | No "Nova" wake word | "Turn on the light." |
+| `invalid` | No "Cathey" wake word | "Turn on the light." |
 
 ---
 
@@ -100,7 +100,7 @@ jupyter notebook main.ipynb
 | 3 | Load LLM (`Qwen2.5-1.5B-Instruct`) |
 | 4 | Load STT (Whisper `tiny.en`) + TTS (pyttsx3) |
 | 5 | Load embedding model + initialize memory |
-| 6 | Create `NovaAgent` |
+| 6 | Create `CatheyAgent` |
 | 7 | Quick text demo (4 sample inputs) |
 | 8 | Start continuous audio loop *(uncomment to enable)* |
 
@@ -258,7 +258,7 @@ main.ipynb
     │       ├── lookup_skill()       ← cosine search in procedural memory
     │       └── build_context()      ← aggregate all layers → RAG prompt
     │
-    ├── NovaAgent (agent.py)
+    ├── CatheyAgent (agent.py)
     │       └── handle(text)         ← routes text through the full pipeline
     │
     └── AudioListener (audio.py)
@@ -286,4 +286,4 @@ main.ipynb
 → Try `WHISPER_MODEL_SIZE = "tiny.en"` (already default) and consider int8 quantization (see Deployment section).
 
 **ChromaDB error on first run**
-→ The `nova_memory/` directory is created automatically. If it's corrupted, delete it: `rm -rf nova_memory/`.
+→ The `cathey_memory/` directory is created automatically. If it's corrupted, delete it: `rm -rf cathey_memory/`.

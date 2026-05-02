@@ -33,7 +33,7 @@
 
 \begin{document}
 
-\title{Nova: An Offline Voice-Controlled Smart Home Assistant on Raspberry Pi 5 with a Four-Layer Memory and a Hybrid Rule-Based / Quantized LLM Pipeline}
+\title{Cathey: An Offline Voice-Controlled Smart Home Assistant on Raspberry Pi 5 with a Four-Layer Memory and a Hybrid Rule-Based / Quantized LLM Pipeline}
 
 \author{
 \IEEEauthorblockN{Team Member A}
@@ -55,7 +55,7 @@ EECS 6895 \\
 \maketitle
 
 \begin{abstract}
-We present Nova, a fully offline voice-controlled smart home assistant that runs on a Raspberry Pi 5. Most commercial assistants such as Alexa or Google Home rely on the cloud, which raises privacy concerns and depends on a stable internet connection. Nova does everything on-device: speech-to-text, intent parsing, dialogue management, and hardware control. The pipeline uses Whisper for STT, a 3B Qwen2.5 model in GGUF Q3\_K\_M format through \texttt{llama-cpp-python} for intent parsing, and Piper for TTS. We also add a rule-based fast path that handles unambiguous commands in under 5\,ms, so the LLM is only used for ambiguous or open-ended speech. To support natural conversation, we add a four-layer memory system (working, episodic, semantic, procedural) that lets the assistant remember user preferences and learn repeating patterns. We fine-tune the LLM with LoRA on a custom dataset of 225 labelled (utterance, JSON) pairs covering four intent types. On a 20-case benchmark across five quantization variants, the chosen 3B Q3\_K\_M model reaches 85\% intent accuracy with an average latency of 3.9\,s, while the rule-based path keeps direct commands near-instant. The full system, including GPIO drivers for an LED ring and a stepper motor (curtain), runs offline on a single Raspberry Pi 5.
+We present Cathey, a fully offline voice-controlled smart home assistant that runs on a Raspberry Pi 5. Most commercial assistants such as Alexa or Google Home rely on the cloud, which raises privacy concerns and depends on a stable internet connection. Nova does everything on-device: speech-to-text, intent parsing, dialogue management, and hardware control. The pipeline uses Whisper for STT, a 3B Qwen2.5 model in GGUF Q3\_K\_M format through \texttt{llama-cpp-python} for intent parsing, and Piper for TTS. We also add a rule-based fast path that handles unambiguous commands in under 5\,ms, so the LLM is only used for ambiguous or open-ended speech. To support natural conversation, we add a four-layer memory system (working, episodic, semantic, procedural) that lets the assistant remember user preferences and learn repeating patterns. We fine-tune the LLM with LoRA on a custom dataset of 225 labelled (utterance, JSON) pairs covering four intent types. On a 20-case benchmark across five quantization variants, the chosen 3B Q3\_K\_M model reaches 85\% intent accuracy with an average latency of 3.9\,s, while the rule-based path keeps direct commands near-instant. The full system, including GPIO drivers for an LED ring and a stepper motor (curtain), runs offline on a single Raspberry Pi 5.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -66,7 +66,7 @@ smart home, voice assistant, edge computing, large language model, LoRA fine-tun
 
 A modern smart home usually depends on cloud-based voice assistants. The user speaks to a microphone, the audio is sent to a remote server, the server returns text or actions, and the device executes them. This works well most of the time, but it has two real problems. First, every spoken command goes to a third-party server, which is a privacy risk many users do not feel comfortable with. Second, when the network is slow or down, the assistant becomes useless. We were also interested in whether a small device like a Raspberry Pi 5 is now powerful enough to do all of this work on its own, given recent progress in quantized large language models.
 
-Our project, called Nova, is an attempt to answer that question. Nova is an offline smart home assistant that listens for the wake word ``Nova'', understands what the user said, and either controls a real device (an LED ring and a stepper-motor curtain in our prototype) or replies in natural speech. Everything happens on a single Raspberry Pi 5 with 8\,GB of RAM. Nothing is sent to the cloud.
+Our project, called Cathey, is an attempt to answer that question. Cathey is an offline smart home assistant that listens for the wake word "Cathey", understands what the user said, and either controls a real device (an LED ring and a stepper-motor curtain in our prototype) or replies in natural speech. Everything happens on a single Raspberry Pi 5 with 8\,GB of RAM. Nothing is sent to the cloud.
 
 The task is harder than it sounds. A voice assistant has to deal with three kinds of user input: clear commands (``turn on the light''), vague feelings (``I feel a bit cold''), and general questions (``how do I store leftovers?''). Each one needs a different reaction. A clear command should be executed right away. A vague feeling should trigger a short clarification dialogue. A general question should be answered in plain language. On top of that, the assistant should remember preferences so that the same vague request next time can be resolved automatically.
 
@@ -109,7 +109,7 @@ The system uses two kinds of data: a fine-tuning dataset that we built ourselves
 There is no public dataset that exactly matches our task (English, four-class intent JSON for a small smart home with light, curtain, window, and AC). So we built our own. We wrote 225 (utterance, JSON output) pairs by hand. They are stored in \texttt{finetune/train\_data.py} as a Python list. Each pair has the form:
 
 \begin{lstlisting}[language=Python]
-("Nova, turn on the light.",
+("Cathey, turn on the light.",
  '{"type":"direct_command","device":"light",
    "action":"turn_on","value":null,
    "reply":"Sure, turning on the light!"}')
@@ -223,7 +223,7 @@ The runtime pipeline is shown in Fig.~\ref{fig:arch}. Each module is a single Py
     \item \texttt{rule\_based.py}: regex fast path for direct commands.
     \item \texttt{llm\_parser.py}: LLM loading and three inference methods (\texttt{parse\_unified}, \texttt{resolve\_followup}, \texttt{answer\_qa}).
     \item \texttt{memory.py}: \texttt{MemoryManager} with the four memory layers.
-    \item \texttt{agent.py}: \texttt{NovaAgent}, the dialogue state machine.
+    \item \texttt{agent.py}: \texttt{CatheyAgent}, the dialogue state machine.
     \item \texttt{schema.py}: device schema, validation, and execution log.
     \item \texttt{gpio\_executor.py}: real hardware control on the Raspberry Pi 5.
     \item \texttt{config.py}: all tunable parameters.
@@ -244,7 +244,7 @@ Rule-based fast path (regex) \\
 $\downarrow$ \emph{(only if no rule match)} \\
 LLM (Qwen2.5-3B-Instruct Q3\_K\_M, llama-cpp-python) \\
 $\downarrow$ \\
-NovaAgent dispatcher (4 intent types) \\
+CatheyAgent dispatcher (4 intent types) \\
 $\downarrow$ \\
 Memory update + Schema validation \\
 $\downarrow$ \\
@@ -266,12 +266,12 @@ LED ring / Stepper motor curtain / Bluetooth speaker
     \item \textbf{STT:} \texttt{faster-whisper tiny.en} in int8 on CPU.
     \item \textbf{TTS:} Piper (\texttt{en\_US-lessac-medium.onnx}).
     \item \textbf{Embeddings:} \texttt{all-MiniLM-L6-v2} (384-d) for both episodic memory and procedural memory lookup.
-    \item \textbf{Service management:} \texttt{systemd} with two services (\texttt{bt-speaker.service}, \texttt{nova.service}).
+    \item \textbf{Service management:} \texttt{systemd} with two services (\texttt{bt-speaker.service}, \texttt{cathey.service}).
 \end{itemize}
 
 \subsection{Dialogue State Machine}
 
-\texttt{NovaAgent} keeps a small state object with a flag \texttt{pending\_clarification}. The flow is:
+\texttt{CatheyAgent} keeps a small state object with a flag \texttt{pending\_clarification}. The flow is:
 \begin{enumerate}
     \item If a clarification is pending and the user says ``Nova'' again, abandon the pending state and treat the new utterance as a new request.
     \item If a clarification is pending and the user replies, call \texttt{resolve\_followup} to map the reply into one of the offered options.
@@ -292,19 +292,19 @@ The main bottleneck on Pi 5 is the LLM inference time, which is around 4\,s for 
 
 \subsection{How To Use}
 
-The user runs \texttt{python nova.py} on the Pi. The system loads STT, TTS, the LLM, the embedding model, and the memory manager, then enters a continuous VAD loop. The user simply says ``Nova, ...'' followed by a request. There is no app to install on a phone, and no internet connection is needed. A short demo session looks like this:
+The user runs \texttt{python nova.py} on the Pi. The system loads STT, TTS, the LLM, the embedding model, and the memory manager, then enters a continuous VAD loop. The user simply says ``Cathey, ...'' followed by a request. There is no app to install on a phone, and no internet connection is needed. A short demo session looks like this:
 \begin{lstlisting}[basicstyle=\ttfamily\scriptsize]
-User: Nova, turn on the light.
-Nova: Sure, turning on the light!
+User: Cathey, turn on the light.
+Cathey: Sure, turning on the light!
    (LED ring lights up)
-User: Nova, I feel a bit cold.
-Nova: Would you like me to close the window
+User: Cathey, I feel a bit cold.
+Cathey: Would you like me to close the window
       or raise the AC temperature?
 User: close the window.
-Nova: Closing the window now.
+Cathey: Closing the window now.
    (Stepper motor moves)
-User: Nova, I feel a bit cold.    [next day]
-Nova: Sure, window close.
+User: Cathey, I feel a bit cold.    [next day]
+Cathey: Sure, window close.
       (based on your past preference)
 \end{lstlisting}
 
@@ -412,17 +412,17 @@ For a vague utterance the LLM call (\textasciitilde 4\,s) replaces the rule-base
 
 We added a stateful test (\texttt{tests/text\_test.ipynb}, Group B) that shows the procedural memory effect:
 \begin{enumerate}
-    \item Step 1: ``Nova, I feel cold.'' $\rightarrow$ Nova asks for clarification.
+    \item Step 1: ``Cathey, I feel cold.'' $\rightarrow$ Nova asks for clarification.
     \item Step 2: User replies ``close the window.'' $\rightarrow$ Action executed; (trigger, action) saved.
     \item Step 3: A reset between sessions.
-    \item Step 4: ``Nova, I feel cold.'' $\rightarrow$ Nova does not ask; it executes ``close window'' directly because it remembers from step 2.
+    \item Step 4: ``Cathey, I feel cold.'' $\rightarrow$ Nova does not ask; it executes ``close window'' directly because it remembers from step 2.
 \end{enumerate}
 This works because of the cosine-similarity lookup in procedural memory (threshold 0.92).
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-We built Nova, a fully offline voice-controlled smart home assistant for Raspberry Pi 5. The system combines Whisper STT, a 3B Qwen2.5 LLM in 3-bit GGUF quantization, a rule-based fast path, a four-layer memory, LoRA fine-tuning, and Piper TTS. Everything runs on-device, with no cloud calls.
+We built Cathey, a fully offline voice-controlled smart home assistant for Raspberry Pi 5. The system combines Whisper STT, a 3B Qwen2.5 LLM in 3-bit GGUF quantization, a rule-based fast path, a four-layer memory, LoRA fine-tuning, and Piper TTS. Everything runs on-device, with no cloud calls.
 
 \textbf{Key results.} On a fixed 20-case benchmark, our chosen model (Qwen2.5-3B-Instruct Q3\_K\_M) reaches 85\% type accuracy with 3.9\,s average latency on Pi. The rule-based path keeps direct commands at $<5$\,ms. LoRA fine-tuning fixes the hard colloquial cases that small models otherwise miss. Procedural memory removes the second clarification for repeating user patterns.
 

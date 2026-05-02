@@ -49,7 +49,7 @@ Classification rules:
 - general_qa: questions unrelated to home device control.
 - invalid: no meaningful request.
 
-CRITICAL: Never infer a device or action from a feeling. "I feel cold", "it's hot", "I'm freezing", "it's too dark", "it's too bright", "it's way too bright", "it's blinding", with or without qualifiers like "very/way/really/a bit", are ALWAYS needs_clarification — NEVER direct_command. Do not pick a device or action. Ask the user.
+CRITICAL: Never infer a device or action from a feeling. "I feel cold", "it's hot", "I'm freezing", "it's too dark", "it's too bright", "it's way too bright", "the light is too bright", "the light is blinding", with or without qualifiers like "very/way/really/a bit", are ALWAYS needs_clarification — NEVER direct_command. "Too bright" or "too dark" are complaints, NOT commands — do NOT pick set_color_temp or set_brightness. Ask the user.
 
 Examples:
 Input: Cathey, turn on the light.
@@ -74,6 +74,9 @@ Input: Cathey, it's too bright in here.
 Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
 
 Input: Cathey, it's way too bright in here.
+Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
+
+Input: Cathey, the light is too bright.
 Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
 
 Input: Cathey, open the curtain a little.

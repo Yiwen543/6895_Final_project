@@ -1,4 +1,4 @@
-# Nova Embedded V2 — Implementation Plan
+# Cathey Embedded V2 — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,7 +17,7 @@
 | `config.py` | Modify | Add `LLM_BACKEND`, `LLM_GGUF_PATH`; remove `LLM_LOAD_IN_4BIT` |
 | `llm_parser.py` | Modify | Add llama-cpp backend alongside transformers |
 | `memory.py` | Modify | Try/except chromadb, add `_InMemoryEpisodic` fallback |
-| `nova.py` | Modify | Fix `MemoryManager` embed_fn call signature |
+| `cathey.py` | Modify | Fix `MemoryManager` embed_fn call signature |
 | `deploy.sh` | Modify | Add libopenblas-dev, GGUF model download |
 | `requirements_pi.txt` | Create | Pi-specific deps with llama-cpp-python |
 
@@ -453,14 +453,14 @@ git add memory.py && git commit -m "feat: optional chromadb with in-memory episo
 
 ---
 
-### Task 4: nova.py — fix MemoryManager embed_fn signature
+### Task 4: cathey.py — fix MemoryManager embed_fn signature
 
 **Files:**
-- Modify: `nova.py`
+- Modify: `cathey.py`
 
 - [ ] **Step 1: Fix the MemoryManager call**
 
-In `nova.py`, replace:
+In `cathey.py`, replace:
 
 ```python
     memory = MemoryManager(embed)
@@ -472,7 +472,7 @@ with:
     memory = MemoryManager(embed_fn=lambda text: embed.encode(text, convert_to_numpy=True).tolist())
 ```
 
-- [ ] **Step 2: Verify nova.py imports resolve**
+- [ ] **Step 2: Verify cathey.py imports resolve**
 
 ```bash
 cd /Users/ezslaptop/Projects/6895_Final_project && python3 -c "
@@ -482,16 +482,16 @@ sys.modules['lgpio'] = MagicMock()
 sys.modules['piper'] = MagicMock()
 sys.modules['piper.voice'] = MagicMock()
 import nova
-print('nova.py imports OK')
+print('cathey.py imports OK')
 "
 ```
 
-Expected: `nova.py imports OK`
+Expected: `cathey.py imports OK`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add nova.py && git commit -m "fix: MemoryManager embed_fn signature in nova.py"
+git add cathey.py && git commit -m "fix: MemoryManager embed_fn signature in cathey.py"
 ```
 
 ---

@@ -1,4 +1,4 @@
-# Nova — Final Presentation Materials
+# Cathey — Final Presentation Materials
 
 EECS 6895 Final Project · Columbia University · May 5, 2026.
 
@@ -33,4 +33,4 @@ Total: ~12 minutes, including demo and group Q&A.
 
 - If the Beamer theme `Madrid` does not match your taste, try `Berlin`, `Frankfurt`, or `metropolis`. Just change the `\usetheme` line.
 - The block diagram on Slide 4 is currently text-only inside an `\fbox`. If you have time, draw a real diagram in TikZ or Figma and replace it with `\includegraphics`.
-- For the demo slide, you can also add screenshots of `nova_memory/skills.json` or the `benchmark_results.md` table.
+- For the demo slide, you can also add screenshots of `cathey_memory/skills.json` or the `benchmark_results.md` table.

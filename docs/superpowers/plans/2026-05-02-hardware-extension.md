@@ -436,7 +436,7 @@ def test_agent_passes_state_to_rule_based():
                 fake.Pi5Neo = mock.Mock()
             sys.modules[mod] = fake
 
-    from agent import NovaAgent
+    from agent import CatheyAgent
     from gpio_executor import GPIOExecutor
 
     gpio = GPIOExecutor.__new__(GPIOExecutor)
@@ -445,7 +445,7 @@ def test_agent_passes_state_to_rule_based():
     gpio._curtain_pos = 0
     gpio._window_pos = 0
 
-    agent = NovaAgent(llm=mock.Mock(), memory=mock.Mock(), speak=mock.Mock(), gpio=gpio)
+    agent = CatheyAgent(llm=mock.Mock(), memory=mock.Mock(), speak=mock.Mock(), gpio=gpio)
 
     with mock.patch("agent.try_rule_based", return_value=None) as mock_rb:
         agent.handle("Cathey, make the light warmer", verbose=False)

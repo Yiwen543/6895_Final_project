@@ -134,7 +134,7 @@ def test_agent_passes_state_to_rule_based():
     # Fresh import of agent
     if "agent" in sys.modules:
         del sys.modules["agent"]
-    from agent import NovaAgent
+    from agent import CatheyAgent
     from gpio_executor import GPIOExecutor
 
     gpio = GPIOExecutor.__new__(GPIOExecutor)
@@ -145,7 +145,7 @@ def test_agent_passes_state_to_rule_based():
 
     llm_mock = mock.Mock()
     llm_mock.parse_unified = mock.Mock(return_value=({"type": "invalid"}, None, 0.0))
-    agent = NovaAgent(llm=llm_mock, memory=mock.Mock(), speak=mock.Mock(), gpio=gpio)
+    agent = CatheyAgent(llm=llm_mock, memory=mock.Mock(), speak=mock.Mock(), gpio=gpio)
 
     with mock.patch("agent.try_rule_based", return_value=None) as mock_rb:
         agent.handle("Cathey, make the light warmer", verbose=False)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Quantization benchmark for Nova LLM — EECS 6895 Final Project.
+Quantization benchmark for Cathey LLM — EECS 6895 Final Project.
 
 Runs a fixed 20-case intent-classification test suite across multiple
 Qwen2.5 GGUF variants and reports accuracy + latency metrics.
@@ -49,16 +49,16 @@ Rules:
 - invalid: no meaningful request.
 
 Examples:
-Input: Nova, turn on the light.
+Input: Cathey, turn on the light.
 Output: {"type":"direct_command","device":"light","action":"turn_on","value":null,"reply":"Sure, turning on the light!"}
 
-Input: Nova, I feel cold.
+Input: Cathey, I feel cold.
 Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"],"reply":"Would you like me to close the window or raise the AC temperature?"}
 
-Input: Nova, it's a bit dark.
+Input: Cathey, it's a bit dark.
 Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"],"reply":"Would you like me to turn on the light or open the curtain?"}
 
-Input: Nova, how do I eat an apple?
+Input: Cathey, how do I eat an apple?
 Output: {"type":"general_qa","answer":"Wash it first, then eat it."}
 
 Input: Hello.
@@ -104,23 +104,23 @@ MODEL_VARIANTS: List[Dict[str, Any]] = [
 
 TEST_CASES: List[Dict[str, Any]] = [
     # direct_command (5)
-    {"input": "Nova, turn on the light.",    "type": "direct_command", "device": "light",   "action": "turn_on"},
-    {"input": "Nova, turn off the light.",   "type": "direct_command", "device": "light",   "action": "turn_off"},
-    {"input": "Nova, set AC to 22 degrees.", "type": "direct_command", "device": "ac",      "action": "set_temperature"},
-    {"input": "Nova, open the curtain.",     "type": "direct_command", "device": "curtain", "action": "open"},
-    {"input": "Nova, set brightness to 70.", "type": "direct_command", "device": "light",   "action": "set_brightness"},
+    {"input": "Cathey, turn on the light.",    "type": "direct_command", "device": "light",   "action": "turn_on"},
+    {"input": "Cathey, turn off the light.",   "type": "direct_command", "device": "light",   "action": "turn_off"},
+    {"input": "Cathey, set AC to 22 degrees.", "type": "direct_command", "device": "ac",      "action": "set_temperature"},
+    {"input": "Cathey, open the curtain.",     "type": "direct_command", "device": "curtain", "action": "open"},
+    {"input": "Cathey, set brightness to 70.", "type": "direct_command", "device": "light",   "action": "set_brightness"},
     # needs_clarification (5)
-    {"input": "Nova, I feel cold.",                       "type": "needs_clarification", "device": None, "action": None},
-    {"input": "Nova, it's a bit dark.",                   "type": "needs_clarification", "device": None, "action": None},
-    {"input": "Nova, it's stuffy in here.",               "type": "needs_clarification", "device": None, "action": None},
-    {"input": "Nova, today's temperature is 28 degrees.", "type": "needs_clarification", "device": None, "action": None},
-    {"input": "Nova, this room is boring.",               "type": "needs_clarification", "device": None, "action": None},
+    {"input": "Cathey, I feel cold.",                       "type": "needs_clarification", "device": None, "action": None},
+    {"input": "Cathey, it's a bit dark.",                   "type": "needs_clarification", "device": None, "action": None},
+    {"input": "Cathey, it's stuffy in here.",               "type": "needs_clarification", "device": None, "action": None},
+    {"input": "Cathey, today's temperature is 28 degrees.", "type": "needs_clarification", "device": None, "action": None},
+    {"input": "Cathey, this room is boring.",               "type": "needs_clarification", "device": None, "action": None},
     # general_qa (5)
-    {"input": "Nova, what's your name?",                          "type": "general_qa", "device": None, "action": None},
-    {"input": "Nova, my name is Aston, what's your name?",        "type": "general_qa", "device": None, "action": None},
-    {"input": "Nova, how do I eat an apple?",                     "type": "general_qa", "device": None, "action": None},
-    {"input": "Nova, what time is it?",                           "type": "general_qa", "device": None, "action": None},
-    {"input": "Nova, what's the weather like today?",             "type": "general_qa", "device": None, "action": None},
+    {"input": "Cathey, what's your name?",                          "type": "general_qa", "device": None, "action": None},
+    {"input": "Cathey, my name is Aston, what's your name?",        "type": "general_qa", "device": None, "action": None},
+    {"input": "Cathey, how do I eat an apple?",                     "type": "general_qa", "device": None, "action": None},
+    {"input": "Cathey, what time is it?",                           "type": "general_qa", "device": None, "action": None},
+    {"input": "Cathey, what's the weather like today?",             "type": "general_qa", "device": None, "action": None},
     # invalid (5)
     {"input": "Hello.",       "type": "invalid", "device": None, "action": None},
     {"input": "Never mind.",  "type": "invalid", "device": None, "action": None},
@@ -339,7 +339,7 @@ def save_outputs(all_metrics: List[Tuple[str, Dict[str, float], float]],
     print("\nSaved: benchmark_results.csv")
 
     with open("benchmark_results.md", "w") as f:
-        f.write("# Nova LLM Quantization Benchmark\n\n")
+        f.write("# Cathey LLM Quantization Benchmark\n\n")
         f.write(_TABLE_HEADER + "\n")
         for name, metrics, size_gb in all_metrics:
             f.write(format_row(name, metrics, size_gb) + "\n")
@@ -352,7 +352,7 @@ def save_outputs(all_metrics: List[Tuple[str, Dict[str, float], float]],
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Nova LLM quantization benchmark")
+    parser = argparse.ArgumentParser(description="Cathey LLM quantization benchmark")
     parser.add_argument("--download", action="store_true",
                         help="Download missing GGUF variants before benchmarking")
     parser.add_argument("--models", type=str, default=None,

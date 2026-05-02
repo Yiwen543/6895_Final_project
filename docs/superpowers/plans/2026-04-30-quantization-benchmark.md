@@ -550,7 +550,7 @@ def save_outputs(all_metrics: List[Tuple[str, Dict[str, float], float]],
 
     # Markdown
     with open("benchmark_results.md", "w") as f:
-        f.write("# Nova LLM Quantization Benchmark\n\n")
+        f.write("# Cathey LLM Quantization Benchmark\n\n")
         f.write(_TABLE_HEADER + "\n")
         for name, metrics, size_gb in all_metrics:
             f.write(format_row(name, metrics, size_gb) + "\n")
@@ -664,7 +664,7 @@ git commit -m "feat: add main() with argparse; benchmark_quantization.py complet
 
 ```bash
 rsync -avz --exclude '__pycache__' --exclude '.git' --exclude 'models/' \
-    --exclude 'voices/' --exclude 'nova_memory/' --exclude '.claude/' \
+    --exclude 'voices/' --exclude 'cathey_memory/' --exclude '.claude/' \
     --exclude 'docs/' --exclude '.ipynb_checkpoints/' --exclude '.pytest_cache/' \
     /Users/ezslaptop/Projects/6895_Final_project/ tl3461@10.206.226.238:~/nova/
 ```

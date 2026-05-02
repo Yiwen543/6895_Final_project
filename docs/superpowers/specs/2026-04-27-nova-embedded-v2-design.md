@@ -1,4 +1,4 @@
-# Nova Embedded V2 Design — Spec Update
+# Cathey Embedded V2 Design — Spec Update
 
 **Date:** 2026-04-27
 **Base:** `2026-04-26-nova-pi5-deployment-design.md` (all unchanged sections still apply)
@@ -68,7 +68,7 @@ Requires `libopenblas-dev` (added to `deploy.sh` apt-get).
 ## Change 2: chromadb optional dependency (memory.py)
 
 ### Problem
-`chromadb` fails to install on Pi 5 (heavy native dependencies). This causes `nova.py` to crash on import.
+`chromadb` fails to install on Pi 5 (heavy native dependencies). This causes `cathey.py` to crash on import.
 
 ### Solution
 Try importing chromadb; if unavailable, fall back to an in-memory list with manual cosine similarity search.
@@ -114,7 +114,7 @@ Updates to match current code state (already implemented, spec was stale):
 ### finetune/train_data.py (already merged from main)
 - Expanded from ~50 to ~170 training samples
 
-### nova.py bug fix needed
+### cathey.py bug fix needed
 ```python
 # Current (broken):
 memory = MemoryManager(embed)
@@ -145,6 +145,6 @@ memory = MemoryManager(embed_fn=lambda text: embed.encode(text, convert_to_numpy
 | `config.py` | Modify | Add `LLM_BACKEND`, `LLM_GGUF_PATH`; remove `LLM_LOAD_IN_4BIT` |
 | `llm_parser.py` | Modify | Add llama-cpp-python backend alongside transformers |
 | `memory.py` | Modify | Try/except chromadb import, add in-memory fallback |
-| `nova.py` | Modify | Fix MemoryManager embed_fn signature |
+| `cathey.py` | Modify | Fix MemoryManager embed_fn signature |
 | `deploy.sh` | Modify | Add libopenblas-dev, GGUF download step |
 | `requirements_pi.txt` | Modify | Add llama-cpp-python, remove bitsandbytes |

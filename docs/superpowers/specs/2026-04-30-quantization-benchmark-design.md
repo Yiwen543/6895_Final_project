@@ -1,5 +1,5 @@
 # Quantization Benchmark Design
-**Project:** Nova Smart Home Assistant — EECS 6895 Final Project
+**Project:** Cathey Smart Home Assistant — EECS 6895 Final Project
 **Date:** 2026-04-30
 **Goal:** Compare GGUF quantization levels across model sizes to find the best accuracy/latency tradeoff for on-device inference on Raspberry Pi 5.
 
@@ -13,7 +13,7 @@ Add a standalone `benchmark_quantization.py` script that:
 - Reports type accuracy, command accuracy, avg/P95 latency, and model size
 - Saves results as `benchmark_results.csv` and `benchmark_results.md`
 
-No changes to the existing Nova pipeline (`nova.py`, `agent.py`, `llm_parser.py`).
+No changes to the existing Nova pipeline (`cathey.py`, `agent.py`, `llm_parser.py`).
 
 ---
 

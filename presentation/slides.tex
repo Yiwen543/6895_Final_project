@@ -19,7 +19,7 @@
   showstringspaces=false,
 }
 
-\title[Nova]{Nova: An Offline Voice-Controlled Smart Home Assistant on Raspberry Pi 5}
+\title[Nova]{Cathey: An Offline Voice-Controlled Smart Home Assistant on Raspberry Pi 5}
 \subtitle{EECS 6895 Final Project}
 \author{Team Member A \and Team Member B \and Team Member C}
 \institute{Columbia University}
@@ -47,7 +47,7 @@
 \vspace{0.4em}
 \textbf{Our question:} can a \$80 Raspberry Pi 5 do all of this offline?
 \vspace{0.4em}
-\textbf{Goal:} build \textbf{Nova} — a fully offline voice assistant that does
+\textbf{Goal:} build \textbf{Cathey} — a fully offline voice assistant that does
 \begin{itemize}
   \item STT, intent parsing, dialogue, TTS, and real GPIO control on-device.
   \item No internet. No cloud. Everything stays on the Pi.
@@ -85,7 +85,7 @@ $\downarrow$ \\
 $\downarrow$ \emph{(only if no rule match)} \\
 \textbf{LLM} (Qwen2.5-3B-Instruct Q3\_K\_M, llama.cpp) \\
 $\downarrow$ \\
-NovaAgent dispatcher (4 intent types) \\
+CatheyAgent dispatcher (4 intent types) \\
 $\downarrow$ \\
 Memory update + Schema validation \\
 $\downarrow$ \\
@@ -329,13 +329,13 @@ Six cases that the base 1.5B model gets wrong:
 % ============================================================
 \begin{frame}{Live Demo}
 \begin{itemize}
-\item Direct command: ``Nova, turn on the light.'' $\rightarrow$ LED lights up.
-\item Brightness: ``Nova, set brightness to 30 percent.''
-\item RGB cycle: ``Nova, start RGB mode.''
-\item Curtain (stepper motor): ``Nova, close the curtain.''
-\item Vague: ``Nova, I feel cold.'' $\rightarrow$ clarification.
+\item Direct command: ``Cathey, turn on the light.'' $\rightarrow$ LED lights up.
+\item Brightness: ``Cathey, set brightness to 30 percent.''
+\item RGB cycle: ``Cathey, start RGB mode.''
+\item Curtain (stepper motor): ``Cathey, close the curtain.''
+\item Vague: ``Cathey, I feel cold.'' $\rightarrow$ clarification.
 \item User chooses; Nova \emph{remembers} for next time.
-\item General QA: ``Nova, how do I store leftovers?'' $\rightarrow$ spoken answer, no device action.
+\item General QA: ``Cathey, how do I store leftovers?'' $\rightarrow$ spoken answer, no device action.
 \end{itemize}
 \vspace{0.5em}
 \centering

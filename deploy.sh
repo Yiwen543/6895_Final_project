@@ -53,11 +53,11 @@ echo "==> Writing bt-speaker.service (MAC: ${BT_MAC})"
 ssh "$PI_HOST" "sed 's/PLACEHOLDER_BT_MAC/${BT_MAC}/g' ~/nova/bt-speaker.service | \
     sudo tee /etc/systemd/system/bt-speaker.service > /dev/null"
 
-echo "==> Installing nova.service"
-ssh "$PI_HOST" "sudo cp ~/nova/nova.service /etc/systemd/system/nova.service"
+echo "==> Installing cathey.service"
+ssh "$PI_HOST" "sudo cp ~/nova/cathey.service /etc/systemd/system/cathey.service"
 
 echo "==> Enabling services"
-ssh "$PI_HOST" "sudo systemctl daemon-reload && sudo systemctl enable bt-speaker nova"
+ssh "$PI_HOST" "sudo systemctl daemon-reload && sudo systemctl enable cathey"
 
 echo ""
 echo "==> Deploy complete."
@@ -73,8 +73,8 @@ echo "    trust  ${BT_MAC}"
 echo "    connect ${BT_MAC}"
 echo "    exit"
 echo ""
-read -rp "Start Nova now? [y/N] " answer
+read -rp "Start Cathey now? [y/N] " answer
 if [[ "${answer,,}" == "y" ]]; then
     ssh "$PI_HOST" "sudo systemctl start bt-speaker && sleep 2 && sudo systemctl start nova"
-    echo "Nova started. Follow logs: ssh ${PI_HOST} 'journalctl -u nova -f'"
+    echo "Cathey started. Follow logs: ssh ${PI_HOST} 'journalctl -u nova -f'"
 fi
