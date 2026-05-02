@@ -47,6 +47,18 @@ def try_rule_based(text: str, state: Dict[str, Any] = None) -> Optional[Dict[str
         if 0 <= val <= 100:
             return {"type": "direct_command", "device": device, "action": "set_position", "value": val}
 
+    # Curtain open with qualifier → set_position (must come before bare open pattern)
+    if re.search(r'\b(?:open)\b.*\bcurtain\b|\bcurtain\b.*\b(?:open)\b', t):
+        _qualifiers = [
+            (r'\ba\s+little\b|\bslightly\b|\bjust\s+a\s+bit\b', 20),
+            (r'\bhalfway\b|\bhalf(?:\s+way)?\b',                50),
+            (r'\bmost\s+of\s+the\s+way\b|\bmostly\b|\bthree[\s-]quarter', 80),
+        ]
+        for pat, pct in _qualifiers:
+            if re.search(pat, t):
+                return {"type": "direct_command", "device": "curtain",
+                        "action": "set_position", "value": pct}
+
     # Simple on/off/open/close patterns
     patterns = [
         (r"\b(?:turn on|switch on)\b.*\blight\b|\blight\b.*\b(?:turn on|switch on)\b",
