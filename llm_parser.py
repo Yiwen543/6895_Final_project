@@ -41,6 +41,7 @@ Outputs:
 {"type":"invalid"}
 
 set_color_temp value: integer 1-5 only. 1=coldest/daylight(6500K), 2=reading(5000K), 3=neutral(4000K), 4=warm(3000K), 5=warmest/candlelight(2700K).
+set_position value: integer 0-100 (percentage open).
 
 Classification rules:
 - direct_command: ONLY when the user EXPLICITLY says a device name (light, curtain, window, ac) AND an action verb (turn on/off, open, close, set, dim, etc.).
