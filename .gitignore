@@ -12,3 +12,7 @@ models/
 # Claude Code local state (worktrees, cache)
 .claude/
 Cathey_Tech_Slides.mp4
+Cathey_Presentation.pptx
+TECHNICAL_REPORT.md
+presentation/
+report/
