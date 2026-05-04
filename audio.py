@@ -100,6 +100,8 @@ class TTSEngine:
                 return
             audio = np.concatenate([c.audio_float_array for c in chunks])
             rate = chunks[0].sample_rate
+            silence = np.zeros(int(0.5 * rate), dtype=audio.dtype)
+            audio = np.concatenate([silence, audio])
             # Write to temp WAV and play via pw-play (PipeWire native,
             # avoids ALSA→PipeWire-pulse jitter on Bluetooth).
             import tempfile, subprocess, os

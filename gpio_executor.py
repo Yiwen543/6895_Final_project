@@ -26,7 +26,7 @@ FAN_TACH_PIN = 16         # GPIO 16 / Pin 36 (optional tachometer input)
 
 # ── Stepper motor (curtain) ───────────────────────────────────────────────────
 MOTOR_PINS          = [5, 6, 13, 26]   # ULN2003 IN1-IN4 → Pins 29,31,33,37
-CURTAIN_TOTAL_STEPS = 10240             # 5 revolutions full travel
+CURTAIN_TOTAL_STEPS = 4096              # 2 revolutions full travel
 STEP_DELAY          = 0.002
 WINDOW_STEP_DELAY   = 0.002
 
@@ -35,8 +35,8 @@ RGB_HUE_STEP   = 0.01
 RGB_CYCLE_TICK = 0.1
 
 
-# Brightness level 1-5 → percentage (1=dimmest, 5=full)
-_BRIGHTNESS_PCT = {1: 20, 2: 40, 3: 60, 4: 80, 5: 100}
+# Brightness level 1-3 → percentage (1=dim, 2=mid, 3=full)
+_BRIGHTNESS_PCT = {1: 20, 2: 50, 3: 100}
 
 # Color temperature lookup: level 1-5 → (R, G, B)
 # Scale: 1=coldest(6500K/daylight) … 5=warmest(2700K/candlelight)
@@ -44,16 +44,14 @@ _BRIGHTNESS_PCT = {1: 20, 2: 40, 3: 60, 4: 80, 5: 100}
 _COLOR_TEMP_RGB = {
     1: (180, 210, 255),   # 6500K — cool blue-white / daylight
     2: (255, 255, 255),   # 5000K — neutral white / reading
-    3: (255, 240, 160),   # 4000K — warm white / daily
-    4: (255, 180,  60),   # 3000K — amber / relax
-    5: (255, 100,  20),   # 2700K — deep orange / candlelight
+    3: (255, 200,  80),   # 4000K — warm yellow
+    4: (255, 120,   0),   # 3000K — orange
+    5: (255,  50,   0),   # 2700K — deep orange
 }
 
 
 def _temp_to_duty(temp: int) -> float:
-    """Linear map: 16 °C → 100 % speed, 30 °C → 10 % speed."""
-    duty = 100.0 - (temp - 16) / (30 - 16) * 90.0
-    return max(10.0, min(100.0, duty))
+    return 20.0 if temp <= 22 else 100.0
 
 
 class GPIOExecutor:
@@ -87,7 +85,7 @@ class GPIOExecutor:
 
         # ── Device state ──────────────────────────────────────────────────────
         self._color_temp_level = 3
-        self._brightness_level = 5   # 1-5, default full brightness
+        self._brightness_level = 2   # 1-3, default mid brightness
 
         # ── Fan (PWM) ─────────────────────────────────────────────────────────
         lgpio.gpio_claim_output(self._h, FAN_PIN)
@@ -278,7 +276,7 @@ class GPIOExecutor:
                 return "LIGHT -> PARTY MODE"
             if action == "turn_on":
                 self._stop_rgb_cycle(); self._stop_party()
-                self._brightness_level = 5
+                self._brightness_level = 2
                 self._apply_light()
                 return "LIGHT -> ON"
             if action == "turn_off":
@@ -288,7 +286,7 @@ class GPIOExecutor:
             if action == "set_brightness":
                 self._stop_rgb_cycle(); self._stop_party()
                 pct = int(value)
-                self._brightness_level = max(1, min(5, round(pct / 20)))
+                self._brightness_level = 1 if pct <= 33 else (2 if pct <= 66 else 3)
                 self._apply_light()
                 return f"LIGHT -> BRIGHTNESS level {self._brightness_level} ({pct}%)"
             if action == "rgb_cycle":

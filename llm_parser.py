@@ -40,71 +40,43 @@ Outputs:
 {"type":"general_qa","answer":"..."}
 {"type":"invalid"}
 
-set_color_temp value: integer 1-5 only. 1=coldest/daylight(6500K), 2=reading(5000K), 3=neutral(4000K), 4=warm(3000K), 5=warmest/candlelight(2700K).
-set_position value: integer 0-100 (percentage open).
+set_color_temp value: 1-5 (1=daylight, 5=candlelight). set_position value: 0-100%.
 
-Classification rules:
-- direct_command: ONLY when the user EXPLICITLY says a device name (light, curtain, window, ac) AND an action verb (turn on/off, open, close, set, dim, etc.).
-- needs_clarification: user expresses a FEELING, COMFORT, or ATMOSPHERE without naming a device action. Words like "cold", "hot", "warm", "chilly", "freezing", "dark", "bright", "gloomy", "stuffy", "boring" are feelings, NOT commands.
-- general_qa: questions unrelated to home device control.
-- invalid: no meaningful request.
+Rules:
+- direct_command: user names a device AND an action.
+- needs_clarification: user describes a feeling/comfort (cold, hot, dark, bright, stuffy) without naming a device+action.
+- general_qa: anything unrelated to device control, including greetings and personal questions.
+- invalid: unintelligible or empty input only.
 
-CRITICAL: Never infer a device or action from a feeling. "I feel cold", "it's hot", "I'm freezing", "it's too dark", "it's too bright", "it's way too bright", "the light is too bright", "the light is blinding", with or without qualifiers like "very/way/really/a bit", are ALWAYS needs_clarification — NEVER direct_command. "Too bright" or "too dark" are complaints, NOT commands — do NOT pick set_color_temp or set_brightness. Ask the user.
+CRITICAL: Feelings are NEVER direct_command. "cold/hot/dark/bright/too bright/stuffy" → always needs_clarification.
 
 Examples:
 Input: Cathey, turn on the light.
-Output: {"type":"direct_command","device":"light","action":"turn_on","value":null,"reply":"Sure, turning on the light!"}
+Output: {"type":"direct_command","device":"light","action":"turn_on","value":null,"reply":"Turning on the light."}
 
 Input: Cathey, set the AC to 24 degrees.
 Output: {"type":"direct_command","device":"ac","action":"set_temperature","value":24,"reply":"Setting AC to 24 degrees."}
 
-Input: Cathey, I feel cold.
-Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"]}
-
-Input: Cathey, it's really hot in here.
-Output: {"type":"needs_clarification","question":"Would you like me to lower the AC temperature or open the window?","options":["lower_ac_temperature","open_window"]}
-
-Input: Cathey, it's a bit dark.
-Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
-
-Input: Cathey, it's gloomy in here.
-Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
-
-Input: Cathey, it's too bright in here.
-Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
-
-Input: Cathey, it's way too bright in here.
-Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
-
-Input: Cathey, the light is too bright.
-Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
-
 Input: Cathey, open the curtain a little.
 Output: {"type":"direct_command","device":"curtain","action":"set_position","value":20,"reply":"Opening the curtain a little."}
-
-Input: Cathey, open the curtain halfway.
-Output: {"type":"direct_command","device":"curtain","action":"set_position","value":50,"reply":"Opening the curtain halfway."}
-
-Input: Cathey, open the curtain most of the way.
-Output: {"type":"direct_command","device":"curtain","action":"set_position","value":80,"reply":"Opening the curtain most of the way."}
 
 Input: Cathey, make the light warmer.
 Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":4,"reply":"Setting warm light."}
 
-Input: Cathey, make the light cozier.
-Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":5,"reply":"Setting cozy warm light."}
+Input: Cathey, I feel cold.
+Output: {"type":"needs_clarification","question":"Would you like me to close the window or raise the AC temperature?","options":["close_window","raise_ac_temperature"]}
 
-Input: Cathey, make the light colder.
-Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":1,"reply":"Setting cold daylight."}
+Input: Cathey, it's too bright.
+Output: {"type":"needs_clarification","question":"Would you like me to lower the brightness or close the curtain?","options":["lower_brightness","close_curtain"]}
 
-Input: Cathey, reading light please.
-Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":2,"reply":"Setting reading light."}
-
-Input: Cathey, I'm going to read, can you fix the light?
-Output: {"type":"direct_command","device":"light","action":"set_color_temp","value":2,"reply":"Setting reading light."}
+Input: Cathey, it's a bit dark.
+Output: {"type":"needs_clarification","question":"Would you like me to turn on the light or open the curtain?","options":["turn_on_light","open_curtain"]}
 
 Input: Cathey, how do I eat an apple?
 Output: {"type":"general_qa","answer":"Wash it first, then eat it."}
+
+Input: Cathey, my name is Alex.
+Output: {"type":"general_qa","answer":"Nice to meet you, Alex!"}
 
 Input: Hello.
 Output: {"type":"invalid"}
@@ -182,6 +154,7 @@ Answer the user's question concisely in 1-2 sentences.
 Use the provided context only if it is clearly relevant.
 Do NOT mention devices (light/curtain/window/AC) unless asked.
 Reply in plain text only — no JSON, no markdown.
+Never call the user "Cathey" or "Nova" — those are your own names, not the user's.
 """.strip()
 
 
@@ -211,7 +184,7 @@ class LLMParser:
             print(f"Loading LLM via llama.cpp ({LLM_GGUF_PATH}) ...")
             self._llama = Llama(
                 model_path=LLM_GGUF_PATH,
-                n_ctx=2048,
+                n_ctx=1024,
                 n_threads=4,
                 verbose=False,
             )
@@ -376,13 +349,12 @@ class LLMParser:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def parse_unified(
-        self, text: str, verbose: bool = False
+        self, text: str, context: str = "", verbose: bool = False
     ) -> Tuple[Dict[str, Any], str, float]:
-        return self._generate_json(
-            UNIFIED_SYSTEM_PROMPT,
-            f'Text: "{text}"\nReturn JSON only.',
-            verbose=verbose,
-        )
+        user_prompt = (
+            f"Context (use only if relevant to answering):\n{context}\n\n" if context else ""
+        ) + f'Text: "{text}"\nReturn JSON only.'
+        return self._generate_json(UNIFIED_SYSTEM_PROMPT, user_prompt, verbose=verbose)
 
     def resolve_followup(
         self,

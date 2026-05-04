@@ -28,6 +28,7 @@ def main() -> None:
 
     listener = AudioListener(agent=cathey, stt=stt)
 
+    embed.encode("warmup", convert_to_numpy=True)   # pre-warm embedding JIT
     print("=== Cathey ready. Listening... ===")
     try:
         listener.continuous_loop()

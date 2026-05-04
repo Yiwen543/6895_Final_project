@@ -84,7 +84,7 @@ EECS 6895 Final Project. Nova 是一个运行在树莓派 5 上的本地语音�
 
 ```bash
 # 同步到 Pi（执行前必须与用户确认）
-rsync -avz ./ tl3461@192.168.100.1:~/nova/
+rsync -avz ./ tl3461@10.207.1.16:~/nova/
 
 # 重启服务
 sudo systemctl restart nova

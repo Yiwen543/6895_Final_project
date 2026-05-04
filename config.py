@@ -64,7 +64,7 @@ EPISODE_DIST_CUTOFF = 0.6    # episodic RAG: keep episodes with distance < this
 
 # ── GPIO hardware ─────────────────────────────────────────────────────────────
 WINDOW_PINS        = [17, 27, 22, 23]   # ULN2003 IN1-IN4 → Pi Pins 11,13,15,16
-WINDOW_TOTAL_STEPS = 1024               # half revolution open/close
+WINDOW_TOTAL_STEPS = 2048               # one full revolution open/close
 
 # ── LoRA fine-tuning ──────────────────────────────────────────────────────────
 LORA_R           = 8

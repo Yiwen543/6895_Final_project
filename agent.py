@@ -176,13 +176,26 @@ class CatheyAgent:
 
         self._memory.push_working("user", text)
 
+        # Extract user name into semantic memory for reliable recall
+        _name_m = re.search(r'\bmy name is ([A-Za-z]+)\b', text, re.IGNORECASE)
+        if _name_m:
+            self._memory.update_pref("user_name", _name_m.group(1).strip())
+
         # Rule-based fast path: skip LLM for unambiguous direct commands
         fast = try_rule_based(text, self._gpio.get_device_state() if self._gpio else None)
         if fast is not None:
             fast["reply"] = self._rule_reply(fast)
             return self._do_direct_command(fast, text, 0.0)
 
-        semantic, _, ms = self._llm.parse_unified(text, verbose=verbose)
+        context = ""
+        if self._memory.episodes.count() > 0:
+            eps = self._memory.retrieve_episodes(text, n=2)
+            ep_lines = [
+                f"Previously: user said \"{ep['text']}\", you replied \"{ep['meta']['cathey_reply']}\""
+                for ep in eps if ep["distance"] < 0.6
+            ]
+            context = "\n".join(ep_lines)
+        semantic, _, ms = self._llm.parse_unified(text, context=context, verbose=verbose)
 
         if semantic["type"] == "direct_command":
             return self._do_direct_command(semantic, text, ms)
@@ -227,6 +240,14 @@ class CatheyAgent:
             self._memory.push_working("cathey", reply)
             return self._result(True, semantic, True, reason,
                                 hw_result, reply, round(ms, 3))
+
+        if reason == "value_must_be_int" and cmd.get("value") is None and cmd.get("action") == "set_temperature":
+            rescue = {
+                "type":     "needs_clarification",
+                "question": "What temperature would you like me to set the AC to?",
+                "options":  ["lower_ac_temperature", "raise_ac_temperature"],
+            }
+            return self._do_clarification(rescue, text, ms, verbose=True)
 
         self._memory.push_working("cathey", "(command invalid)")
         return self._result(True, semantic, False, reason, "SKIPPED", None, round(ms, 3))
