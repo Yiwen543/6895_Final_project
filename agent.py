@@ -16,8 +16,12 @@ Four intent types handled:
 import re
 import threading
 from difflib import SequenceMatcher
-from gpio_executor import GPIOExecutor
 from rule_based import try_rule_based
+
+try:
+    from gpio_executor import GPIOExecutor
+except ImportError:
+    GPIOExecutor = None  # lgpio not available (non-Pi environment)
 from typing import Any, Callable, Dict, Optional
 
 from config import ASSISTANT_NAME, ASSISTANT_NAME_VARIANTS
