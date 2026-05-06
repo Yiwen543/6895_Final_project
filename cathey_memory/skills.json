@@ -1,0 +1,32 @@
+[
+  {
+    "trigger": "Cathey, I feel cold.",
+    "action": {
+      "device": "window",
+      "action": "close",
+      "value": null
+    },
+    "count": 3,
+    "last_used": "2026-05-06T17:42:04"
+  },
+  {
+    "trigger": "Cathey, it is stuffy in here.",
+    "action": {
+      "device": "window",
+      "action": "open",
+      "value": null
+    },
+    "count": 1,
+    "last_used": "2026-05-06T17:42:00"
+  },
+  {
+    "trigger": "Cathey, it is stuffy.",
+    "action": {
+      "device": "window",
+      "action": "open",
+      "value": null
+    },
+    "count": 1,
+    "last_used": "2026-05-06T17:42:13"
+  }
+]
