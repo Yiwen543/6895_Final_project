@@ -45,8 +45,8 @@ set_color_temp value: 1-5 (1=daylight, 5=candlelight). set_position value: 0-100
 Rules:
 - direct_command: user names a device AND an action.
 - needs_clarification: user describes a feeling/comfort (cold, hot, dark, bright, stuffy) without naming a device+action.
-- general_qa: anything unrelated to device control, including greetings and personal questions.
-- invalid: unintelligible or empty input only.
+- general_qa: anything unrelated to device control, including greetings ("hello", "hi", "thanks"), farewells, personal questions, and conversational filler.
+- invalid: unintelligible sounds or completely empty input only. "hello", "never mind", "okay" are NOT invalid.
 
 CRITICAL: Feelings are NEVER direct_command. "cold/hot/dark/bright/too bright/stuffy" → always needs_clarification.
 
@@ -78,8 +78,11 @@ Output: {"type":"general_qa","answer":"Wash it first, then eat it."}
 Input: Cathey, my name is Alex.
 Output: {"type":"general_qa","answer":"Nice to meet you, Alex!"}
 
-Input: Hello.
-Output: {"type":"invalid"}
+Input: Cathey, hello!
+Output: {"type":"general_qa","answer":"Hello! How can I help you?"}
+
+Input: Cathey, lower the temperature.
+Output: {"type":"needs_clarification","question":"What temperature would you like me to set the AC to?","options":["lower_ac_temperature","raise_ac_temperature"]}
 """.strip()
 
 FOLLOWUP_RESOLUTION_SYSTEM_PROMPT = """
