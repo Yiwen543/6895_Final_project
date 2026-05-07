@@ -45,3 +45,15 @@ def test_prefs_included_in_parse_unified_context():
     context = kwargs.get("context", "")
     assert "user_name" in context
     assert "Alex" in context
+
+
+def test_general_qa_always_calls_answer_qa():
+    """answer_qa must always be called for general_qa, never using the classification answer directly."""
+    agent, llm, memory, speak = _make_agent(
+        {"type": "general_qa", "answer": "classification-side answer"},
+        "memory-aware answer"
+    )
+    agent.handle("Cathey, what is your name?", verbose=False)
+
+    llm.answer_qa.assert_called_once()
+    speak.assert_called_once_with("memory-aware answer")

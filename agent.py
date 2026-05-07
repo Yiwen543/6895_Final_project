@@ -212,7 +212,7 @@ class CatheyAgent:
             return self._do_clarification(semantic, text, ms, verbose)
 
         if semantic["type"] == "general_qa":
-            return self._do_general_qa(text, ms, verbose, pre_answer=semantic.get("answer", ""))
+            return self._do_general_qa(text, ms, verbose)
 
         reply = "Sorry, I didn't understand that."
         self._speak(reply)
@@ -306,13 +306,9 @@ class CatheyAgent:
         return self._result(True, semantic, True, "clarification_requested",
                             "PENDING_USER_REPLY", clarification, round(ms, 3))
 
-    def _do_general_qa(self, text, ms, verbose, pre_answer: str = "") -> Dict[str, Any]:
-        if pre_answer:
-            answer = pre_answer
-            qa_ms = 0.0
-        else:
-            context = self._memory.build_context(text)
-            answer, qa_ms = self._llm.answer_qa(text, context, verbose=verbose)
+    def _do_general_qa(self, text, ms, verbose) -> Dict[str, Any]:
+        context = self._memory.build_context(text)
+        answer, qa_ms = self._llm.answer_qa(text, context, verbose=verbose)
         self._speak(answer)
         self._memory.save_episode(text, "general_qa", answer)
         self._memory.push_working("cathey", answer)
