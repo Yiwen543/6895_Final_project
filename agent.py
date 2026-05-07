@@ -199,6 +199,10 @@ class CatheyAgent:
                 for ep in eps if ep["distance"] < 0.6
             ]
             context = "\n".join(ep_lines)
+        if self._memory.prefs:
+            pref_lines = [f"- {k}: {v}" for k, v in self._memory.prefs.items()]
+            pref_block = "\n".join(pref_lines)
+            context = f"{context}\n{pref_block}".strip() if context else pref_block
         semantic, _, ms = self._llm.parse_unified(text, context=context, verbose=verbose)
 
         if semantic["type"] == "direct_command":

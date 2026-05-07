@@ -13,3 +13,35 @@ def test_prompt_teaches_hello_as_general_qa():
 
 def test_prompt_has_lower_temperature_example():
     assert "lower the temperature" in UNIFIED_SYSTEM_PROMPT.lower()
+
+
+from unittest.mock import MagicMock
+from agent import CatheyAgent
+
+
+def _make_agent(parse_result, qa_result=""):
+    llm = MagicMock()
+    llm.parse_unified.return_value = (parse_result, "", 100.0)
+    llm.answer_qa.return_value = (qa_result, 50.0)
+
+    memory = MagicMock()
+    memory.episodes.count.return_value = 0
+    memory.prefs = {"user_name": "Alex"}
+    memory.build_context.return_value = "## User preferences\n- user_name: Alex"
+    memory.skills = []
+
+    speak = MagicMock()
+    return CatheyAgent(llm=llm, memory=memory, speak=speak, gpio=None), llm, memory, speak
+
+
+def test_prefs_included_in_parse_unified_context():
+    """parse_unified must receive context that contains current user prefs."""
+    agent, llm, memory, speak = _make_agent(
+        {"type": "general_qa", "answer": "Your name is Alex."}, "Your name is Alex."
+    )
+    agent.handle("Cathey, what's my name?", verbose=False)
+
+    _, kwargs = llm.parse_unified.call_args
+    context = kwargs.get("context", "")
+    assert "user_name" in context
+    assert "Alex" in context
