@@ -10,13 +10,14 @@ On Pi 5 (CPU): uses llama-cpp-python with a GGUF Q4_K_M quantized model.
 Backend is selected via LLM_BACKEND in config.py.
 """
 
+import os
 import re
 import json
 import time
 import torch
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import LLM_BACKEND, LLM_MODEL_NAME, LLM_GGUF_PATH, LLM_DEVICE, LLM_DTYPE, LLM_MAX_NEW_TOKENS
+from config import LLM_BACKEND, LLM_MODEL_NAME, LLM_GGUF_PATH, LLM_DEVICE, LLM_DTYPE, LLM_MAX_NEW_TOKENS, LORA_INFERENCE_PATH
 
 if LLM_BACKEND == "transformers":
     from transformers import (
@@ -206,6 +207,11 @@ class LLMParser:
                 )
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
+            if os.path.isdir(LORA_INFERENCE_PATH):
+                from peft import PeftModel
+                print(f"Loading LoRA adapter from {LORA_INFERENCE_PATH} ...")
+                self.model = PeftModel.from_pretrained(self.model, LORA_INFERENCE_PATH)
+                print("LoRA adapter loaded.")
             self.model.eval()
             self._llama = None
         print("LLM ready.")
