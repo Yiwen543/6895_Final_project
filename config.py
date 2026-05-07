@@ -3,7 +3,6 @@ import torch
 # ── LLM ──────────────────────────────────────────────────────────────────────
 LLM_MODEL_NAME     = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 LLM_GGUF_PATH      = "models/qwen2.5-3b-instruct-q3_k_m.gguf"
-LORA_ADAPTER_PATH  = "cathey_lora_adapter/final_adapter"
 
 if torch.cuda.is_available():
     LLM_BACKEND       = "transformers"
@@ -68,7 +67,8 @@ WINDOW_PINS        = [17, 27, 22, 23]   # ULN2003 IN1-IN4 → Pi Pins 11,13,15,1
 WINDOW_TOTAL_STEPS = 2048               # one full revolution open/close
 
 # ── LoRA fine-tuning ──────────────────────────────────────────────────────────
-LORA_R           = 8
-LORA_ALPHA       = 16
-LORA_ADAPTER_DIR = "cathey_lora_adapter"
-LORA_MERGED_DIR  = "cathey_lora_merged"
+LORA_R                = 8
+LORA_ALPHA            = 16
+LORA_ADAPTER_DIR      = "cathey_lora_adapter"        # training output root
+LORA_MERGED_DIR       = "cathey_lora_merged"
+LORA_INFERENCE_PATH   = "cathey_lora_adapter/final_adapter"  # loaded at inference time
