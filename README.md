@@ -1,4 +1,4 @@
-# Nova — Offline Smart Home Assistant
+# Cathey — Offline Smart Home Assistant
 
 EECS 6895 Final Project · Columbia University
 
